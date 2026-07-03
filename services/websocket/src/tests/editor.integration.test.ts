@@ -7,7 +7,7 @@ import {
   EditorStateDTO,
   EditorOperationDTO,
   EventEnvelope,
-  RealtimeEvents,
+  RealtimeEvents
 } from "@coding-arena/api-contracts";
 
 describe("WebSocket Collaborative Editor Integration Tests", () => {
@@ -37,13 +37,13 @@ describe("WebSocket Collaborative Editor Integration Tests", () => {
     const clientA = Client(`http://localhost:${port}`, {
       auth: { token: tokenA },
       transports: ["websocket"],
-      autoConnect: false,
+      autoConnect: false
     });
 
     let clientB = Client(`http://localhost:${port}`, {
       auth: { token: tokenB },
       transports: ["websocket"],
-      autoConnect: false,
+      autoConnect: false
     });
 
     let roomId = "";
@@ -51,15 +51,11 @@ describe("WebSocket Collaborative Editor Integration Tests", () => {
     clientA.connect();
 
     clientA.on("connect", () => {
-      clientA.emit(
-        "room:create",
-        { name: "Editor Lobby" },
-        (res: { success: boolean; data?: RoomStateDTO }) => {
-          expect(res.success).toBe(true);
-          roomId = res.data!.id;
-          clientB.connect();
-        },
-      );
+      clientA.emit("room:create", { name: "Editor Lobby" }, (res: { success: boolean; data?: RoomStateDTO }) => {
+        expect(res.success).toBe(true);
+        roomId = res.data!.id;
+        clientB.connect();
+      });
     });
 
     clientB.on("connect", () => {
@@ -73,11 +69,11 @@ describe("WebSocket Collaborative Editor Integration Tests", () => {
 
           clientA.emit(
             "editor:change",
-            { index: 0, text: "const x = 5;", type: "insert" },
+            { id: "op-1", baseVersion: 0, index: 0, text: "const x = 5;", type: "insert" },
             (changeRes: { success: boolean; data?: EditorOperationDTO }) => {
               expect(changeRes.success).toBe(true);
               expect(changeRes.data!.version).toBe(1);
-            },
+            }
           );
         });
       });
@@ -87,37 +83,35 @@ describe("WebSocket Collaborative Editor Integration Tests", () => {
       expect(envelope.event).toBe(RealtimeEvents.EDITOR_CHANGE);
       const op = envelope.payload;
 
-      expect(op.version).toBe(1);
-      expect(op.text).toBe("const x = 5;");
-      expect(op.type).toBe("insert");
-      expect(op.index).toBe(0);
+      if (op.id === "op-1") {
+        expect(op.version).toBe(1);
+        expect(op.text).toBe("const x = 5;");
+        expect(op.type).toBe("insert");
+        expect(op.index).toBe(0);
 
-      clientB.emit(
-        "editor:change",
-        { index: 12, text: "\n", type: "insert" },
-        (changeRes: { success: boolean; data?: EditorOperationDTO }) => {
-          expect(changeRes.success).toBe(true);
-          expect(changeRes.data!.version).toBe(2);
-          clientB.disconnect();
-        },
-      );
+        clientB.emit(
+          "editor:change",
+          { id: "op-2", baseVersion: 1, index: 12, text: "\n", type: "insert" },
+          (changeRes: { success: boolean; data?: EditorOperationDTO }) => {
+            expect(changeRes.success).toBe(true);
+            expect(changeRes.data!.version).toBe(2);
+            clientB.disconnect();
+          }
+        );
+      }
     });
 
     let isReconnected = false;
 
     clientA.on(RealtimeEvents.ROOM_UPDATED, (envelope: EventEnvelope<RoomStateDTO>) => {
       const room = envelope.payload;
-      if (
-        room.participants["user-b"] &&
-        !room.participants["user-b"].isConnected &&
-        !isReconnected
-      ) {
+      if (room.participants["user-b"] && !room.participants["user-b"].isConnected && !isReconnected) {
         isReconnected = true;
 
         clientB = Client(`http://localhost:${port}`, {
           auth: { token: tokenB },
           transports: ["websocket"],
-          autoConnect: false,
+          autoConnect: false
         });
 
         clientB.connect();
@@ -134,6 +128,78 @@ describe("WebSocket Collaborative Editor Integration Tests", () => {
           });
         });
       }
+    });
+  });
+
+  it("should transform concurrent edits based on baseVersion using simple OT index shifts", (done) => {
+    const tokenA = createToken("user-a", "alice");
+    const tokenB = createToken("user-b", "bob");
+
+    const clientA = Client(`http://localhost:${port}`, {
+      auth: { token: tokenA },
+      transports: ["websocket"],
+      autoConnect: false
+    });
+
+    const clientB = Client(`http://localhost:${port}`, {
+      auth: { token: tokenB },
+      transports: ["websocket"],
+      autoConnect: false
+    });
+
+    let roomId = "";
+
+    clientA.connect();
+
+    clientA.on("connect", () => {
+      clientA.emit("room:create", { name: "OT Test Lobby" }, (res: { success: boolean; data?: RoomStateDTO }) => {
+        expect(res.success).toBe(true);
+        roomId = res.data!.id;
+        clientB.connect();
+      });
+    });
+
+    clientB.on("connect", () => {
+      clientB.emit("room:join", { roomId }, (joinRes: { success: boolean }) => {
+        expect(joinRes.success).toBe(true);
+
+        let aliceChangeCompleted = false;
+        let bobChangeCompleted = false;
+
+        const checkCompletion = () => {
+          if (aliceChangeCompleted && bobChangeCompleted) {
+            clientA.emit("editor:sync", (syncRes: { success: boolean; data?: EditorStateDTO }) => {
+              expect(syncRes.success).toBe(true);
+              expect(syncRes.data!.content).toBe("const x = 5;");
+              expect(syncRes.data!.version).toBe(2);
+
+              clientA.close();
+              clientB.close();
+              done();
+            });
+          }
+        };
+
+        clientA.emit(
+          "editor:change",
+          { id: "alice-1", baseVersion: 0, index: 0, text: "const ", type: "insert" },
+          (res: { success: boolean; data?: EditorOperationDTO }) => {
+            expect(res.success).toBe(true);
+            aliceChangeCompleted = true;
+            checkCompletion();
+          }
+        );
+
+        clientB.emit(
+          "editor:change",
+          { id: "bob-1", baseVersion: 0, index: 0, text: "x = 5;", type: "insert" },
+          (res: { success: boolean; data?: EditorOperationDTO }) => {
+            expect(res.success).toBe(true);
+            bobChangeCompleted = true;
+            checkCompletion();
+          }
+        );
+      });
     });
   });
 });

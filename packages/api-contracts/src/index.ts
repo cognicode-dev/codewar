@@ -249,12 +249,15 @@ export interface SubmissionUpdatedPayload {
 export type RoomUpdatedPayload = RoomStateDTO;
 
 export interface EditorOperationDTO {
+  id: string;
   userId: string;
   roomId: string;
+  baseVersion: number;
   version: number;
+  timestamp: string;
+  type: "insert" | "delete";
   index: number;
   text: string;
-  type: "insert" | "delete";
 }
 
 export interface EditorStateDTO {

@@ -17,7 +17,7 @@ export function registerEditorHandlers(
   socket.on(
     "editor:change",
     (
-      payload: { index: number; text: string; type: "insert" | "delete" },
+      payload: { id: string; baseVersion: number; index: number; text: string; type: "insert" | "delete" },
       callback?: (res: { success: boolean; data?: unknown; error?: string }) => void,
     ) => {
       try {
