@@ -266,3 +266,15 @@ export interface EditorStateDTO {
   version: number;
   updatedAt: string;
 }
+
+export interface DomainEvent<T = any> {
+  type: string;
+  timestamp: string;
+  data: T;
+}
+
+export const DomainEventTypes = {
+  ROOM_CREATED: "domain.room.created",
+  ROOM_UPDATED: "domain.room.updated",
+  EDITOR_OPERATION_APPLIED: "domain.editor.operation_applied"
+} as const;

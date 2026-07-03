@@ -19,30 +19,67 @@ export class EditorEngine {
   }
 
   public transform(op: EditorOperationDTO, appliedOp: EditorOperationDTO): EditorOperationDTO {
-    const transformed = { ...op };
+    let transformed = { ...op };
 
-    if (appliedOp.type === "insert") {
-      if (appliedOp.index < op.index) {
-        transformed.index += appliedOp.text.length;
-      } else if (appliedOp.index === op.index) {
-        if (appliedOp.userId < op.userId) {
-          transformed.index += appliedOp.text.length;
-        }
-      }
-    } else if (appliedOp.type === "delete") {
-      const deleteLen = appliedOp.text.length;
-      const deleteStart = appliedOp.index;
-      const deleteEnd = deleteStart + deleteLen;
-
-      if (deleteEnd <= op.index) {
-        transformed.index -= deleteLen;
-      } else if (deleteStart < op.index) {
-        transformed.index = deleteStart;
-      }
+    if (op.type === "insert" && appliedOp.type === "insert") {
+      transformed = this.transformInsertInsert(transformed, appliedOp);
+    } else if (op.type === "insert" && appliedOp.type === "delete") {
+      transformed = this.transformInsertDelete(transformed, appliedOp);
+    } else if (op.type === "delete" && appliedOp.type === "insert") {
+      transformed = this.transformDeleteInsert(transformed, appliedOp);
+    } else if (op.type === "delete" && appliedOp.type === "delete") {
+      transformed = this.transformDeleteDelete(transformed, appliedOp);
     }
 
     transformed.baseVersion = appliedOp.version;
-
     return transformed;
+  }
+
+  private transformInsertInsert(op: EditorOperationDTO, appliedOp: EditorOperationDTO): EditorOperationDTO {
+    const res = { ...op };
+    if (appliedOp.index < op.index) {
+      res.index += appliedOp.text.length;
+    } else if (appliedOp.index === op.index) {
+      if (appliedOp.userId < op.userId) {
+        res.index += appliedOp.text.length;
+      }
+    }
+    return res;
+  }
+
+  private transformInsertDelete(op: EditorOperationDTO, appliedOp: EditorOperationDTO): EditorOperationDTO {
+    const res = { ...op };
+    const deleteLen = appliedOp.text.length;
+    const deleteStart = appliedOp.index;
+    const deleteEnd = deleteStart + deleteLen;
+
+    if (deleteEnd <= op.index) {
+      res.index -= deleteLen;
+    } else if (deleteStart < op.index) {
+      res.index = deleteStart;
+    }
+    return res;
+  }
+
+  private transformDeleteInsert(op: EditorOperationDTO, appliedOp: EditorOperationDTO): EditorOperationDTO {
+    const res = { ...op };
+    if (appliedOp.index <= op.index) {
+      res.index += appliedOp.text.length;
+    }
+    return res;
+  }
+
+  private transformDeleteDelete(op: EditorOperationDTO, appliedOp: EditorOperationDTO): EditorOperationDTO {
+    const res = { ...op };
+    const deleteLen = appliedOp.text.length;
+    const deleteStart = appliedOp.index;
+    const deleteEnd = deleteStart + deleteLen;
+
+    if (deleteEnd <= op.index) {
+      res.index -= deleteLen;
+    } else if (deleteStart < op.index) {
+      res.index = deleteStart;
+    }
+    return res;
   }
 }
