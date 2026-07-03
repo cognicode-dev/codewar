@@ -6,6 +6,9 @@ import { socketAuthMiddleware } from "./middleware/auth.middleware";
 import { EventBroker } from "@coding-arena/utils";
 import { RoomManager } from "./modules/room/room.manager";
 import { registerRoomHandlers } from "./modules/room/room.handler";
+import { ConnectionRegistry } from "./registry/connection.registry";
+import { SessionManager } from "./modules/session/session.manager";
+import { RealtimeEvents } from "@coding-arena/api-contracts";
 
 const app = express();
 const port = process.env.PORT || 3002;
@@ -17,14 +20,15 @@ const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
     origin: "*",
-    methods: ["GET", "POST"],
-  },
+    methods: ["GET", "POST"]
+  }
 });
 
 io.use(socketAuthMiddleware);
 
 const roomManager = new RoomManager();
-const userSockets = new Map<string, Set<string>>();
+const connectionRegistry = new ConnectionRegistry();
+const sessionManager = new SessionManager();
 
 io.on("connection", (socket) => {
   const userId = socket.data.userId as string;
@@ -32,43 +36,27 @@ io.on("connection", (socket) => {
 
   console.log(`[WebSocket Service] User ${username} (${userId}) connected on socket ${socket.id}`);
 
-  if (!userSockets.has(userId)) {
-    userSockets.set(userId, new Set());
-  }
-  userSockets.get(userId)!.add(socket.id);
+  connectionRegistry.register(userId, socket);
+  sessionManager.getOrCreateSession(userId, username);
 
-  // Bind Room System handlers
-  registerRoomHandlers(io, socket, roomManager);
+  registerRoomHandlers(io, socket, roomManager, connectionRegistry, sessionManager);
 
   socket.on("disconnect", () => {
     console.log(`[WebSocket Service] User ${username} disconnected from socket ${socket.id}`);
-    const sockets = userSockets.get(userId);
-    if (sockets) {
-      sockets.delete(socket.id);
-      if (sockets.size === 0) {
-        userSockets.delete(userId);
-      }
-    }
+    connectionRegistry.deregister(userId, socket.id);
   });
 });
 
 EventBroker.subscribe("submission:updated", (payload) => {
   const { userId, submissionId, status, verdict, timeMs, memoryMb } = payload;
-  const sockets = userSockets.get(userId);
-  if (sockets && sockets.size > 0) {
-    console.log(
-      `[WebSocket Service] Broadcasting submission update ${submissionId} to user ${userId}`,
-    );
-    for (const socketId of sockets) {
-      io.to(socketId).emit("submission:updated", {
-        submissionId,
-        status,
-        verdict,
-        timeMs,
-        memoryMb,
-      });
-    }
-  }
+  console.log(`[WebSocket Service] Broadcasting submission update ${submissionId} to user ${userId}`);
+  connectionRegistry.sendToUser(userId, RealtimeEvents.SUBMISSION_UPDATED, {
+    submissionId,
+    status,
+    verdict,
+    timeMs,
+    memoryMb
+  });
 });
 
 if (process.env.NODE_ENV !== "test") {

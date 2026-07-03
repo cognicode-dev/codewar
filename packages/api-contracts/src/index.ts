@@ -216,3 +216,26 @@ export interface RoomStateDTO {
   participants: Record<string, ParticipantDTO>;
   createdAt: string;
 }
+
+export const RealtimeEvents = {
+  SUBMISSION_UPDATED: "submission.updated",
+  ROOM_UPDATED: "room.updated",
+  ERROR: "error"
+} as const;
+
+export interface EventEnvelope<T = any> {
+  event: string;
+  timestamp: string;
+  correlationId?: string;
+  payload: T;
+}
+
+export interface SubmissionUpdatedPayload {
+  submissionId: string;
+  status: string;
+  verdict: string | null;
+  timeMs: number | null;
+  memoryMb: number | null;
+}
+
+export type RoomUpdatedPayload = RoomStateDTO;

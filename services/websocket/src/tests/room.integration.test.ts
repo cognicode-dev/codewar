@@ -2,7 +2,7 @@ import { io as Client } from "socket.io-client";
 import { httpServer } from "../index";
 import jwt from "jsonwebtoken";
 import { env } from "@coding-arena/config";
-import { RoomStateDTO } from "@coding-arena/api-contracts";
+import { RoomStateDTO, EventEnvelope, RealtimeEvents } from "@coding-arena/api-contracts";
 
 describe("WebSocket Room System Integration Tests", () => {
   let port: number;
@@ -30,13 +30,13 @@ describe("WebSocket Room System Integration Tests", () => {
     const clientA = Client(`http://localhost:${port}`, {
       auth: { token: tokenA },
       transports: ["websocket"],
-      autoConnect: false,
+      autoConnect: false
     });
 
     const clientB = Client(`http://localhost:${port}`, {
       auth: { token: tokenB },
       transports: ["websocket"],
-      autoConnect: false,
+      autoConnect: false
     });
 
     let targetRoomId = "";
@@ -56,7 +56,7 @@ describe("WebSocket Room System Integration Tests", () => {
 
           targetRoomId = room.id;
           clientB.connect();
-        },
+        }
       );
     });
 
@@ -69,14 +69,19 @@ describe("WebSocket Room System Integration Tests", () => {
           const room = res.data!;
           expect(room.participants["user-b"]).toBeDefined();
           expect(room.participants["user-b"].isReady).toBe(false);
-        },
+        }
       );
     });
 
     let updateCount = 0;
 
-    clientA.on("room:updated", (room: RoomStateDTO) => {
+    clientA.on(RealtimeEvents.ROOM_UPDATED, (envelope: EventEnvelope<RoomStateDTO>) => {
       updateCount++;
+
+      expect(envelope.event).toBe(RealtimeEvents.ROOM_UPDATED);
+      expect(envelope.timestamp).toBeDefined();
+
+      const room = envelope.payload;
 
       if (updateCount === 1) {
         expect(room.participants["user-a"]).toBeDefined();
@@ -91,7 +96,7 @@ describe("WebSocket Room System Integration Tests", () => {
           (res: { success: boolean; data?: RoomStateDTO; error?: string }) => {
             expect(res.success).toBe(true);
             expect(res.data!.participants["user-b"].isReady).toBe(true);
-          },
+          }
         );
       } else if (updateCount === 3) {
         expect(room.participants["user-b"].isReady).toBe(true);

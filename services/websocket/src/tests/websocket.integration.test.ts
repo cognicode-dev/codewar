@@ -3,6 +3,7 @@ import { httpServer } from "../index";
 import jwt from "jsonwebtoken";
 import { env } from "@coding-arena/config";
 import { EventBroker } from "@coding-arena/utils";
+import { EventEnvelope, RealtimeEvents, SubmissionUpdatedPayload } from "@coding-arena/api-contracts";
 
 describe("WebSocket Service Integration Tests", () => {
   let port: number;
@@ -27,7 +28,7 @@ describe("WebSocket Service Integration Tests", () => {
     const clientSocket = Client(`http://localhost:${port}`, {
       auth: { token: "invalid-token" },
       transports: ["websocket"],
-      autoConnect: false,
+      autoConnect: false
     });
 
     clientSocket.connect();
@@ -44,7 +45,7 @@ describe("WebSocket Service Integration Tests", () => {
     const clientSocket = Client(`http://localhost:${port}`, {
       auth: { token },
       transports: ["websocket"],
-      autoConnect: false,
+      autoConnect: false
     });
 
     clientSocket.connect();
@@ -56,13 +57,13 @@ describe("WebSocket Service Integration Tests", () => {
     });
   });
 
-  it("should receive real-time updates published via EventBroker", (done) => {
+  it("should receive real-time updates published via EventBroker wrapped in envelope", (done) => {
     const userId = "user-789";
     const token = createToken(userId, "broadcaster_tester");
     const clientSocket = Client(`http://localhost:${port}`, {
       auth: { token },
       transports: ["websocket"],
-      autoConnect: false,
+      autoConnect: false
     });
 
     clientSocket.connect();
@@ -74,15 +75,20 @@ describe("WebSocket Service Integration Tests", () => {
         status: "COMPLETED",
         verdict: "ACCEPTED",
         timeMs: 45,
-        memoryMb: 12,
+        memoryMb: 12
       };
 
-      clientSocket.on("submission:updated", (data) => {
+      clientSocket.on(RealtimeEvents.SUBMISSION_UPDATED, (envelope: EventEnvelope<SubmissionUpdatedPayload>) => {
+        expect(envelope.event).toBe(RealtimeEvents.SUBMISSION_UPDATED);
+        expect(envelope.timestamp).toBeDefined();
+        
+        const data = envelope.payload;
         expect(data.submissionId).toBe(testPayload.submissionId);
         expect(data.status).toBe(testPayload.status);
         expect(data.verdict).toBe(testPayload.verdict);
         expect(data.timeMs).toBe(testPayload.timeMs);
         expect(data.memoryMb).toBe(testPayload.memoryMb);
+        
         clientSocket.close();
         done();
       });
