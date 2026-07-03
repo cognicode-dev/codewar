@@ -4,6 +4,8 @@ import { Server } from "socket.io";
 import cors from "cors";
 import { socketAuthMiddleware } from "./middleware/auth.middleware";
 import { EventBroker } from "@coding-arena/utils";
+import { RoomManager } from "./modules/room/room.manager";
+import { registerRoomHandlers } from "./modules/room/room.handler";
 
 const app = express();
 const port = process.env.PORT || 3002;
@@ -21,6 +23,7 @@ const io = new Server(httpServer, {
 
 io.use(socketAuthMiddleware);
 
+const roomManager = new RoomManager();
 const userSockets = new Map<string, Set<string>>();
 
 io.on("connection", (socket) => {
@@ -33,6 +36,9 @@ io.on("connection", (socket) => {
     userSockets.set(userId, new Set());
   }
   userSockets.get(userId)!.add(socket.id);
+
+  // Bind Room System handlers
+  registerRoomHandlers(io, socket, roomManager);
 
   socket.on("disconnect", () => {
     console.log(`[WebSocket Service] User ${username} disconnected from socket ${socket.id}`);

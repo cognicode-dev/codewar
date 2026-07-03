@@ -418,6 +418,9 @@ importers:
 
   services/websocket:
     dependencies:
+      '@coding-arena/api-contracts':
+        specifier: workspace:*
+        version: link:../../packages/api-contracts
       '@coding-arena/config':
         specifier: workspace:*
         version: link:../../packages/config

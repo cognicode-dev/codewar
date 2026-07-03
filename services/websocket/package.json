@@ -11,6 +11,7 @@
     "test": "jest --runInBand"
   },
   "dependencies": {
+    "@coding-arena/api-contracts": "workspace:*",
     "@coding-arena/config": "workspace:*",
     "@coding-arena/types": "workspace:*",
     "@coding-arena/utils": "workspace:*",

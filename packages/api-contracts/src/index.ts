@@ -193,3 +193,26 @@ export interface CreateSubmissionRequest {
   code: string;
   language: string;
 }
+
+export enum RoomStatus {
+  LOBBY = "LOBBY",
+  PLAYING = "PLAYING",
+  FINISHED = "FINISHED",
+}
+
+export interface ParticipantDTO {
+  userId: string;
+  username: string;
+  isReady: boolean;
+  joinedAt: string;
+}
+
+export interface RoomStateDTO {
+  id: string;
+  name: string;
+  hostId: string;
+  status: RoomStatus;
+  problemId: string | null;
+  participants: Record<string, ParticipantDTO>;
+  createdAt: string;
+}
