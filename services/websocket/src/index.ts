@@ -14,11 +14,15 @@ import {
   DomainEvent,
   RoomStateDTO,
   EditorOperationDTO,
-  RoomStatus
+  RoomStatus,
+  MatchStateDTO,
+  MatchStatus
 } from "@coding-arena/api-contracts";
 import { logger } from "@coding-arena/logger";
 import { EditorManager } from "./modules/editor/editor.manager";
 import { registerEditorHandlers } from "./modules/editor/editor.handler";
+import { MatchManager } from "./modules/match/match.manager";
+import { MatchEngine } from "./modules/match/match.engine";
 
 const app = express();
 const port = process.env.PORT || 3002;
@@ -30,8 +34,8 @@ const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
     origin: "*",
-    methods: ["GET", "POST"],
-  },
+    methods: ["GET", "POST"]
+  }
 });
 
 io.use(socketAuthMiddleware);
@@ -40,6 +44,8 @@ const roomManager = new RoomManager();
 const editorManager = new EditorManager();
 const connectionRegistry = new ConnectionRegistry();
 const sessionManager = new SessionManager();
+const matchManager = new MatchManager();
+const matchEngine = new MatchEngine();
 
 io.on("connection", (socket) => {
   const userId = socket.data.userId as string;
@@ -55,48 +61,60 @@ io.on("connection", (socket) => {
     try {
       const updatedRoom = roomManager.setUserConnectionStatus(session.activeRoomId, userId, true);
       socket.join(`room:${session.activeRoomId}`);
-      logger.info(
-        { userId, roomId: session.activeRoomId },
-        "User reconnected, restored connection status",
-      );
-
+      logger.info({ userId, roomId: session.activeRoomId }, "User reconnected, restored connection status");
+      
       EventBroker.publish(DomainEventTypes.ROOM_UPDATED, {
         type: DomainEventTypes.ROOM_UPDATED,
         timestamp: new Date().toISOString(),
-        data: { roomId: session.activeRoomId, roomState: updatedRoom },
+        data: { roomId: session.activeRoomId, roomState: updatedRoom }
       });
     } catch {
       sessionManager.leaveRoom(userId);
     }
   }
 
-  registerRoomHandlers(socket, roomManager, sessionManager);
+  registerRoomHandlers(socket, roomManager, sessionManager, matchManager);
   registerEditorHandlers(socket, editorManager, sessionManager);
 
   socket.on("disconnect", () => {
-    logger.info(
-      { userId, username, socketId: socket.id },
-      "User disconnected from websocket service",
-    );
+    logger.info({ userId, username, socketId: socket.id }, "User disconnected from websocket service");
     connectionRegistry.deregister(userId, socket.id);
   });
 });
 
 // Domain Event Listeners (WebSocket Notifier)
+EventBroker.subscribe(DomainEventTypes.ROOM_UPDATED, (event: DomainEvent<{ roomId: string; roomState: RoomStateDTO }>) => {
+  const { roomId, roomState } = event.data;
+  connectionRegistry.sendToRoom(io, roomId, RealtimeEvents.ROOM_UPDATED, roomState);
+});
+
+EventBroker.subscribe(DomainEventTypes.EDITOR_OPERATION_APPLIED, (event: DomainEvent<{ roomId: string; appliedOp: EditorOperationDTO }>) => {
+  const { roomId, appliedOp } = event.data;
+  connectionRegistry.sendToRoom(io, roomId, RealtimeEvents.EDITOR_CHANGE, appliedOp);
+});
+
 EventBroker.subscribe(
-  DomainEventTypes.ROOM_UPDATED,
-  (event: DomainEvent<{ roomId: string; roomState: RoomStateDTO }>) => {
-    const { roomId, roomState } = event.data;
-    connectionRegistry.sendToRoom(io, roomId, RealtimeEvents.ROOM_UPDATED, roomState);
-  },
+  DomainEventTypes.MATCH_STARTED,
+  (event: DomainEvent<{ roomId: string; matchState: MatchStateDTO }>) => {
+    const { roomId, matchState } = event.data;
+    connectionRegistry.sendToRoom(io, roomId, RealtimeEvents.MATCH_STARTED, matchState);
+  }
 );
 
 EventBroker.subscribe(
-  DomainEventTypes.EDITOR_OPERATION_APPLIED,
-  (event: DomainEvent<{ roomId: string; appliedOp: EditorOperationDTO }>) => {
-    const { roomId, appliedOp } = event.data;
-    connectionRegistry.sendToRoom(io, roomId, RealtimeEvents.EDITOR_CHANGE, appliedOp);
-  },
+  DomainEventTypes.MATCH_FINISHED,
+  (event: DomainEvent<{ roomId: string; matchState: MatchStateDTO; winnerUserId: string }>) => {
+    const { roomId, matchState, winnerUserId } = event.data;
+    connectionRegistry.sendToRoom(io, roomId, RealtimeEvents.MATCH_FINISHED, { matchState, winnerUserId });
+  }
+);
+
+EventBroker.subscribe(
+  DomainEventTypes.MATCH_ABORTED,
+  (event: DomainEvent<{ roomId: string; matchState: MatchStateDTO; reason: string }>) => {
+    const { roomId, matchState, reason } = event.data;
+    connectionRegistry.sendToRoom(io, roomId, RealtimeEvents.MATCH_ABORTED, { matchState, reason });
+  }
 );
 
 EventBroker.subscribe("submission:updated", (payload) => {
@@ -110,26 +128,34 @@ EventBroker.subscribe("submission:updated", (payload) => {
     memoryMb
   });
 
-  if (status === "COMPLETED" && verdict === "ACCEPTED") {
+  if (status === "COMPLETED") {
     const session = sessionManager.getSession(userId);
     if (session && session.activeRoomId) {
       const roomId = session.activeRoomId;
       const room = roomManager.getRoom(roomId);
-      if (room && room.status === RoomStatus.ACTIVE) {
-        const finishedRoom = roomManager.finishMatch(roomId, userId);
-        logger.info({ roomId, winnerUserId: userId }, "Match completed, winner declared");
+      if (room && room.status === RoomStatus.MATCH_IN_PROGRESS && room.currentMatchId) {
+        const match = matchManager.getMatch(room.currentMatchId);
+        if (match && match.status === MatchStatus.ACTIVE) {
+          const outcome = matchEngine.processVerdict(match, userId, verdict);
+          if (outcome.finished) {
+            const finishedMatch = matchManager.finishMatch(match.id, userId, outcome.winnerTeam);
+            const finishedRoom = roomManager.finishMatchSession(roomId);
 
-        EventBroker.publish(DomainEventTypes.ROOM_UPDATED, {
-          type: DomainEventTypes.ROOM_UPDATED,
-          timestamp: new Date().toISOString(),
-          data: { roomId, roomState: finishedRoom }
-        });
+            logger.info({ roomId, matchId: match.id, winnerUserId: userId }, "Match completed successfully");
 
-        EventBroker.publish(DomainEventTypes.MATCH_FINISHED, {
-          type: DomainEventTypes.MATCH_FINISHED,
-          timestamp: new Date().toISOString(),
-          data: { roomId, matchState: finishedRoom, winnerUserId: userId }
-        });
+            EventBroker.publish(DomainEventTypes.ROOM_UPDATED, {
+              type: DomainEventTypes.ROOM_UPDATED,
+              timestamp: new Date().toISOString(),
+              data: { roomId, roomState: finishedRoom }
+            });
+
+            EventBroker.publish(DomainEventTypes.MATCH_FINISHED, {
+              type: DomainEventTypes.MATCH_FINISHED,
+              timestamp: new Date().toISOString(),
+              data: { roomId, matchState: finishedMatch, winnerUserId: userId }
+            });
+          }
+        }
       }
     }
   }

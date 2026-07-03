@@ -197,11 +197,30 @@ export interface CreateSubmissionRequest {
 export enum RoomStatus {
   CREATED = "CREATED",
   WAITING = "WAITING",
-  READY_CHECK = "READY_CHECK",
+  MATCH_IN_PROGRESS = "MATCH_IN_PROGRESS",
+  CLOSED = "CLOSED"
+}
+
+export enum MatchStatus {
   COUNTDOWN = "COUNTDOWN",
   ACTIVE = "ACTIVE",
   FINISHED = "FINISHED",
-  CLOSED = "CLOSED",
+  ABORTED = "ABORTED"
+}
+
+export interface MatchStateDTO {
+  id: string;
+  roomId: string;
+  problemId: string;
+  status: MatchStatus;
+  redTeam: string[];
+  blueTeam: string[];
+  winnerUserId: string | null;
+  winnerTeam: "red" | "blue" | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  abortedAt: string | null;
+  abortedReason: string | null;
 }
 
 export interface ParticipantDTO {
@@ -220,6 +239,8 @@ export interface RoomStateDTO {
   status: RoomStatus;
   problemId: string | null;
   participants: Record<string, ParticipantDTO>;
+  currentMatchId: string | null;
+  pastMatchIds: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -229,7 +250,10 @@ export const RealtimeEvents = {
   ROOM_UPDATED: "room.updated",
   EDITOR_CHANGE: "editor.change",
   EDITOR_SYNC: "editor.sync",
-  ERROR: "error",
+  MATCH_STARTED: "match.started",
+  MATCH_FINISHED: "match.finished",
+  MATCH_ABORTED: "match.aborted",
+  ERROR: "error"
 } as const;
 
 export interface EventEnvelope<T = any> {
@@ -279,5 +303,6 @@ export const DomainEventTypes = {
   ROOM_UPDATED: "domain.room.updated",
   EDITOR_OPERATION_APPLIED: "domain.editor.operation_applied",
   MATCH_STARTED: "domain.match.started",
-  MATCH_FINISHED: "domain.match.finished"
+  MATCH_FINISHED: "domain.match.finished",
+  MATCH_ABORTED: "domain.match.aborted"
 } as const;

@@ -31,6 +31,8 @@ export class RoomManager {
       participants: {
         [hostId]: hostParticipant
       },
+      currentMatchId: null,
+      pastMatchIds: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -49,8 +51,12 @@ export class RoomManager {
       throw new Error("Room not found");
     }
 
-    if (room.status === RoomStatus.FINISHED || room.status === RoomStatus.CLOSED) {
-      throw new Error("Cannot join a room that is finished or closed");
+    if (room.status === RoomStatus.CLOSED) {
+      throw new Error("Cannot join a room that is closed");
+    }
+
+    if (room.status === RoomStatus.MATCH_IN_PROGRESS) {
+      throw new Error("Cannot join a room during an active match");
     }
 
     if (room.participants[userId]) {
@@ -112,9 +118,8 @@ export class RoomManager {
       throw new Error("Room not found");
     }
 
-    const validStatesForReady = [RoomStatus.CREATED, RoomStatus.WAITING, RoomStatus.READY_CHECK];
-    if (!validStatesForReady.includes(room.status)) {
-      throw new Error("Cannot change ready status during active or finished matches");
+    if (room.status !== RoomStatus.CREATED && room.status !== RoomStatus.WAITING) {
+      throw new Error("Cannot change ready status during match countdown or active matches");
     }
 
     const participant = room.participants[userId];
@@ -154,9 +159,8 @@ export class RoomManager {
     if (room.hostId !== hostId) {
       throw new Error("Only the host can select a problem");
     }
-    const validStatesForProblemSelect = [RoomStatus.CREATED, RoomStatus.WAITING, RoomStatus.READY_CHECK];
-    if (!validStatesForProblemSelect.includes(room.status)) {
-      throw new Error("Cannot select a problem after the match has started");
+    if (room.status !== RoomStatus.CREATED && room.status !== RoomStatus.WAITING) {
+      throw new Error("Cannot select a problem during match countdown or active matches");
     }
     room.problemId = problemId;
     room.updatedAt = new Date().toISOString();
@@ -172,12 +176,8 @@ export class RoomManager {
     if (!room) {
       throw new Error("Room not found");
     }
-    if (
-      room.status !== RoomStatus.CREATED &&
-      room.status !== RoomStatus.WAITING &&
-      room.status !== RoomStatus.READY_CHECK
-    ) {
-      throw new Error("Cannot assign team during active or finished matches");
+    if (room.status !== RoomStatus.CREATED && room.status !== RoomStatus.WAITING) {
+      throw new Error("Cannot assign team during match countdown or active matches");
     }
     const participant = room.participants[userId];
     if (!participant) {
@@ -188,15 +188,41 @@ export class RoomManager {
     return room;
   }
 
-  public finishMatch(roomId: string, _winnerUserId: string): RoomStateDTO {
+  public startMatchSession(roomId: string, matchId: string): RoomStateDTO {
     const room = this.rooms.get(roomId);
     if (!room) {
       throw new Error("Room not found");
     }
-    if (room.status !== RoomStatus.ACTIVE) {
-      throw new Error("Cannot finish a match that is not active");
+    room.status = RoomStatus.MATCH_IN_PROGRESS;
+    room.currentMatchId = matchId;
+    room.updatedAt = new Date().toISOString();
+    return room;
+  }
+
+  public finishMatchSession(roomId: string): RoomStateDTO {
+    const room = this.rooms.get(roomId);
+    if (!room) {
+      throw new Error("Room not found");
     }
-    room.status = RoomStatus.FINISHED;
+    if (room.currentMatchId) {
+      room.pastMatchIds.push(room.currentMatchId);
+    }
+    room.status = RoomStatus.WAITING;
+    room.currentMatchId = null;
+    room.updatedAt = new Date().toISOString();
+    return room;
+  }
+
+  public abortMatchSession(roomId: string): RoomStateDTO {
+    const room = this.rooms.get(roomId);
+    if (!room) {
+      throw new Error("Room not found");
+    }
+    if (room.currentMatchId) {
+      room.pastMatchIds.push(room.currentMatchId);
+    }
+    room.status = RoomStatus.WAITING;
+    room.currentMatchId = null;
     room.updatedAt = new Date().toISOString();
     return room;
   }
