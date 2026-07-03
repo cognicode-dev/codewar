@@ -3,7 +3,7 @@ import { RoomManager } from "./room.manager";
 import { SessionManager } from "../session/session.manager";
 import { MatchManager } from "../match/match.manager";
 import { countdownScheduler } from "../match/countdown.scheduler";
-import { DomainEventTypes, RoomStatus, MatchStatus } from "@coding-arena/api-contracts";
+import { DomainEventTypes, RoomStatus } from "@coding-arena/api-contracts";
 import { EventBroker } from "@coding-arena/utils";
 import { logger } from "@coding-arena/logger";
 

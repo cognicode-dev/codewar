@@ -144,3 +144,43 @@ model SubmissionJob {
 
   @@index([submissionId])
 }
+
+enum DbMatchStatus {
+  COUNTDOWN
+  ACTIVE
+  FINISHED
+  ABORTED
+}
+
+model Match {
+  id             String             @id @default(uuid())
+  roomId         String
+  problemId      String
+  status         DbMatchStatus
+  winnerUserId   String?
+  winnerTeam     String?
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  abortedAt      DateTime?
+  abortedReason  String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  participants   MatchParticipant[]
+
+  @@index([roomId])
+  @@index([problemId])
+}
+
+model MatchParticipant {
+  id           String    @id @default(uuid())
+  matchId      String
+  match        Match     @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  userId       String
+  team         String?
+  result       String?   // "WON", "LOST", "DRAW", "ABORTED"
+  ratingChange Int       @default(0)
+  createdAt    DateTime  @default(now())
+
+  @@index([matchId])
+  @@index([userId])
+}

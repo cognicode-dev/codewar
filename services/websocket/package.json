@@ -13,6 +13,7 @@
   "dependencies": {
     "@coding-arena/api-contracts": "workspace:*",
     "@coding-arena/config": "workspace:*",
+    "@coding-arena/database": "workspace:*",
     "@coding-arena/logger": "workspace:*",
     "@coding-arena/types": "workspace:*",
     "@coding-arena/utils": "workspace:*",

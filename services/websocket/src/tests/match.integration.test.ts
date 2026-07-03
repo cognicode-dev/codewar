@@ -11,15 +11,21 @@ import {
   EventEnvelope
 } from "@coding-arena/api-contracts";
 import { EventBroker } from "@coding-arena/utils";
+import { prisma } from "@coding-arena/database";
 
 describe("WebSocket Match Lifecycle Integration Tests", () => {
   let port: number;
 
-  beforeAll((done) => {
-    httpServer.listen(() => {
-      const address = httpServer.address();
-      port = typeof address === "string" ? 3002 : address?.port || 3002;
-      done();
+  beforeAll(async () => {
+    await prisma.matchParticipant.deleteMany();
+    await prisma.match.deleteMany();
+
+    await new Promise<void>((resolve) => {
+      httpServer.listen(() => {
+        const address = httpServer.address();
+        port = typeof address === "string" ? 3002 : address?.port || 3002;
+        resolve();
+      });
     });
   });
 
@@ -90,7 +96,6 @@ describe("WebSocket Match Lifecycle Integration Tests", () => {
       });
     });
 
-    // 1. Assert MATCH_STARTED triggers
     clientA.on(RealtimeEvents.MATCH_STARTED, (envelope: EventEnvelope<MatchStateDTO>) => {
       const match = envelope.payload;
       expect(match.id).toBe(activeMatchId);
@@ -98,12 +103,10 @@ describe("WebSocket Match Lifecycle Integration Tests", () => {
       expect(match.redTeam).toContain("user-a");
       expect(match.blueTeam).toContain("user-b");
 
-      // Verify setting changes are locked during match execution
       clientA.emit("room:select-problem", { problemId: "prob-hacked" }, (hackRes: { success: boolean; error?: string }) => {
         expect(hackRes.success).toBe(false);
         expect(hackRes.error).toContain("Cannot select a problem during match countdown or active matches");
 
-        // 2. Publish ACCEPTED submission to end the match
         const submissionPayload = {
           userId: "user-a",
           submissionId: "sub-999",
@@ -116,7 +119,6 @@ describe("WebSocket Match Lifecycle Integration Tests", () => {
       });
     });
 
-    // 3. Assert MATCH_FINISHED triggers
     clientA.on(RealtimeEvents.MATCH_FINISHED, (envelope: EventEnvelope<{ matchState: MatchStateDTO; winnerUserId: string }>) => {
       const data = envelope.payload;
       expect(data.matchState.id).toBe(activeMatchId);
@@ -124,14 +126,37 @@ describe("WebSocket Match Lifecycle Integration Tests", () => {
       expect(data.winnerUserId).toBe("user-a");
     });
 
-    // 4. Assert Room returns to lobby waiting state
     clientA.on(RealtimeEvents.ROOM_UPDATED, (envelope: EventEnvelope<RoomStateDTO>) => {
       const room = envelope.payload;
       if (room.status === RoomStatus.WAITING && room.pastMatchIds.includes(activeMatchId)) {
         expect(room.currentMatchId).toBeNull();
-        clientA.close();
-        clientB.close();
-        done();
+        
+        setTimeout(async () => {
+          try {
+            const dbMatch = await prisma.match.findUnique({
+              where: { id: activeMatchId },
+              include: { participants: true }
+            });
+            expect(dbMatch).toBeDefined();
+            expect(dbMatch?.status).toBe("FINISHED");
+            expect(dbMatch?.winnerUserId).toBe("user-a");
+            expect(dbMatch?.participants.length).toBe(2);
+
+            const participantA = dbMatch?.participants.find((p) => p.userId === "user-a");
+            expect(participantA?.team).toBe("red");
+            expect(participantA?.result).toBe("WON");
+
+            const participantB = dbMatch?.participants.find((p) => p.userId === "user-b");
+            expect(participantB?.team).toBe("blue");
+            expect(participantB?.result).toBe("LOST");
+
+            clientA.close();
+            clientB.close();
+            done();
+          } catch (e) {
+            done(e);
+          }
+        }, 500);
       }
     });
   }, 10000);
@@ -153,6 +178,7 @@ describe("WebSocket Match Lifecycle Integration Tests", () => {
     });
 
     let roomId = "";
+    let countdownStarted = false;
 
     clientA.connect();
 
@@ -171,8 +197,7 @@ describe("WebSocket Match Lifecycle Integration Tests", () => {
               clientB.emit("room:ready", () => {
                 clientA.emit("room:start", (startRes: { success: boolean }) => {
                   expect(startRes.success).toBe(true);
-
-                  // Cancel countdown by switching team
+                  countdownStarted = true;
                   clientB.emit("room:assign-team", { team: "spectator" });
                 });
               });
@@ -190,11 +215,21 @@ describe("WebSocket Match Lifecycle Integration Tests", () => {
 
     clientA.on(RealtimeEvents.ROOM_UPDATED, (envelope: EventEnvelope<RoomStateDTO>) => {
       const room = envelope.payload;
-      // Should have reset back to WAITING lobby state
-      if (room.status === RoomStatus.WAITING && room.currentMatchId === null) {
-        clientA.close();
-        clientB.close();
-        done();
+      if (countdownStarted && room.status === RoomStatus.WAITING && room.currentMatchId === null) {
+        setTimeout(async () => {
+          try {
+            const matchCount = await prisma.match.count({
+              where: { roomId: room.id }
+            });
+            expect(matchCount).toBe(0);
+
+            clientA.close();
+            clientB.close();
+            done();
+          } catch (e) {
+            done(e);
+          }
+        }, 500);
       }
     });
   }, 10000);

@@ -23,6 +23,7 @@ import { EditorManager } from "./modules/editor/editor.manager";
 import { registerEditorHandlers } from "./modules/editor/editor.handler";
 import { MatchManager } from "./modules/match/match.manager";
 import { MatchEngine } from "./modules/match/match.engine";
+import { prisma } from "@coding-arena/database";
 
 const app = express();
 const port = process.env.PORT || 3002;
@@ -95,25 +96,106 @@ EventBroker.subscribe(DomainEventTypes.EDITOR_OPERATION_APPLIED, (event: DomainE
 
 EventBroker.subscribe(
   DomainEventTypes.MATCH_STARTED,
-  (event: DomainEvent<{ roomId: string; matchState: MatchStateDTO }>) => {
+  async (event: DomainEvent<{ roomId: string; matchState: MatchStateDTO }>) => {
     const { roomId, matchState } = event.data;
     connectionRegistry.sendToRoom(io, roomId, RealtimeEvents.MATCH_STARTED, matchState);
+
+    try {
+      await prisma.match.create({
+        data: {
+          id: matchState.id,
+          roomId,
+          problemId: matchState.problemId,
+          status: "ACTIVE",
+          startedAt: matchState.startedAt ? new Date(matchState.startedAt) : new Date(),
+          participants: {
+            create: [
+              ...matchState.redTeam.map((userId) => ({
+                userId,
+                team: "red"
+              })),
+              ...matchState.blueTeam.map((userId) => ({
+                userId,
+                team: "blue"
+              }))
+            ]
+          }
+        }
+      });
+      logger.info({ matchId: matchState.id }, "Match persisted to database successfully");
+    } catch (error) {
+      logger.error({ matchId: matchState.id, error: (error as Error).message }, "Failed to persist Match to database");
+    }
   }
 );
 
 EventBroker.subscribe(
   DomainEventTypes.MATCH_FINISHED,
-  (event: DomainEvent<{ roomId: string; matchState: MatchStateDTO; winnerUserId: string }>) => {
+  async (event: DomainEvent<{ roomId: string; matchState: MatchStateDTO; winnerUserId: string }>) => {
     const { roomId, matchState, winnerUserId } = event.data;
     connectionRegistry.sendToRoom(io, roomId, RealtimeEvents.MATCH_FINISHED, { matchState, winnerUserId });
+
+    try {
+      await prisma.$transaction([
+        prisma.match.update({
+          where: { id: matchState.id },
+          data: {
+            status: "FINISHED",
+            winnerUserId,
+            winnerTeam: matchState.winnerTeam,
+            finishedAt: matchState.finishedAt ? new Date(matchState.finishedAt) : new Date()
+          }
+        }),
+        ...matchState.redTeam.map((userId) =>
+          prisma.matchParticipant.updateMany({
+            where: { matchId: matchState.id, userId },
+            data: { result: winnerUserId === userId ? "WON" : "LOST" }
+          })
+        ),
+        ...matchState.blueTeam.map((userId) =>
+          prisma.matchParticipant.updateMany({
+            where: { matchId: matchState.id, userId },
+            data: { result: winnerUserId === userId ? "WON" : "LOST" }
+          })
+        )
+      ]);
+      logger.info({ matchId: matchState.id }, "Match finished persisted to database successfully");
+    } catch (error) {
+      logger.error({ matchId: matchState.id, error: (error as Error).message }, "Failed to update Match finished in database");
+    }
   }
 );
 
 EventBroker.subscribe(
   DomainEventTypes.MATCH_ABORTED,
-  (event: DomainEvent<{ roomId: string; matchState: MatchStateDTO; reason: string }>) => {
+  async (event: DomainEvent<{ roomId: string; matchState: MatchStateDTO; reason: string }>) => {
     const { roomId, matchState, reason } = event.data;
     connectionRegistry.sendToRoom(io, roomId, RealtimeEvents.MATCH_ABORTED, { matchState, reason });
+
+    try {
+      const existing = await prisma.match.findUnique({
+        where: { id: matchState.id }
+      });
+      if (existing) {
+        await prisma.$transaction([
+          prisma.match.update({
+            where: { id: matchState.id },
+            data: {
+              status: "ABORTED",
+              abortedAt: matchState.abortedAt ? new Date(matchState.abortedAt) : new Date(),
+              abortedReason: reason
+            }
+          }),
+          prisma.matchParticipant.updateMany({
+            where: { matchId: matchState.id },
+            data: { result: "ABORTED" }
+          })
+        ]);
+        logger.info({ matchId: matchState.id }, "Match aborted persisted to database successfully");
+      }
+    } catch (error) {
+      logger.error({ matchId: matchState.id, error: (error as Error).message }, "Failed to update Match aborted in database");
+    }
   }
 );
 
