@@ -1,0 +1,22 @@
+{
+  "name": "coding-arena",
+  "private": true,
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "lint": "turbo lint",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "prepare": "husky",
+    "knip": "knip"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.3.0",
+    "@commitlint/config-conventional": "^19.2.2",
+    "husky": "^9.0.11",
+    "knip": "^5.16.0",
+    "prettier": "^3.2.5",
+    "turbo": "^2.10.2",
+    "typescript": "^5.4.5"
+  }
+}

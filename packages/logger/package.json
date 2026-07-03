@@ -1,0 +1,20 @@
+{
+  "name": "@coding-arena/logger",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "pino": "^9.1.0"
+  },
+  "devDependencies": {
+    "@coding-arena/tsconfig": "workspace:*",
+    "@types/node": "^20.12.12",
+    "pino-pretty": "^11.0.0",
+    "typescript": "^5.4.5"
+  }
+}

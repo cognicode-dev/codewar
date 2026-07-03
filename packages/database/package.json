@@ -1,0 +1,21 @@
+{
+  "name": "@coding-arena/database",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "prisma generate && tsc",
+    "dev": "tsc --watch",
+    "db:generate": "prisma generate"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.14.0"
+  },
+  "devDependencies": {
+    "@coding-arena/tsconfig": "workspace:*",
+    "@types/node": "^20.12.12",
+    "prisma": "^5.14.0",
+    "typescript": "^5.4.5"
+  }
+}

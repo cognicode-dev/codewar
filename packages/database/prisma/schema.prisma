@@ -1,0 +1,146 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String         @id @default(uuid())
+  username      String         @unique
+  email         String         @unique
+  passwordHash  String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  refreshTokens RefreshToken[]
+  profile       Profile?
+  submissions   Submission[]
+
+  @@index([username])
+  @@index([email])
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  tokenHash String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Profile {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  displayName    String?
+  avatarUrl      String?
+  bio            String?
+  visibility     String   @default("PUBLIC") // PUBLIC, PRIVATE, FRIENDS_ONLY
+  
+  // Preferences
+  theme          String   @default("DARK")
+  language       String   @default("EN")
+  editorSettings Json?
+  
+  // Statistics
+  xp             Int      @default(0)
+  level          Int      @default(1)
+  gamesPlayed    Int      @default(0)
+  gamesWon       Int      @default(0)
+  
+  // Social Links
+  githubUrl      String?
+  linkedinUrl    String?
+  websiteUrl     String?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model Problem {
+  id          String           @id @default(uuid())
+  slug        String           @unique
+  title       String
+  difficulty  String           // EASY, MEDIUM, HARD
+  tags        String[]
+  visibility  String           // PUBLIC, PRIVATE, DRAFT
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  versions    ProblemVersion[]
+  submissions Submission[]
+
+  @@index([slug])
+  @@index([difficulty])
+}
+
+model ProblemVersion {
+  id             String   @id @default(uuid())
+  problemId      String
+  problem        Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  version        Int
+  statement      String   // Markdown description of the problem
+  constraints    String   // Markdown description of the constraints
+  timeLimit      Int      // Time limit in milliseconds
+  memoryLimit    Int      // Memory limit in MB
+  examples       Json     // Array of example inputs/outputs/explanations
+  testCases      Json     // Array of hidden test cases used by the judge
+  languages      Json     // Code templates for supported languages
+  editorial      String?  // Markdown description of the solution
+  createdAt      DateTime @default(now())
+
+  @@unique([problemId, version])
+  @@index([problemId])
+}
+
+enum SubmissionStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+model Submission {
+  id             String           @id @default(uuid())
+  userId         String
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  problemId      String
+  problem        Problem          @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  problemVersion Int
+  code           String
+  language       String
+  status         SubmissionStatus @default(PENDING)
+  verdict        String?
+  timeMs         Int?
+  memoryMb       Int?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  jobs           SubmissionJob[]
+
+  @@index([userId])
+  @@index([problemId])
+}
+
+model SubmissionJob {
+  id             String           @id @default(uuid())
+  submissionId   String
+  submission     Submission       @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  status         SubmissionStatus @default(PENDING)
+  verdict        String?
+  timeMs         Int?
+  memoryMb       Int?
+  error          String?
+  results        Json?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([submissionId])
+}

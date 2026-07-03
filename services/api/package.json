@@ -1,0 +1,46 @@
+{
+  "name": "@coding-arena/api",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "lint": "eslint \"src/**/*.ts\"",
+    "test": "jest --runInBand --detectOpenHandles"
+  },
+  "dependencies": {
+    "@coding-arena/api-contracts": "workspace:*",
+    "@coding-arena/config": "workspace:*",
+    "@coding-arena/database": "workspace:*",
+    "@coding-arena/logger": "workspace:*",
+    "@coding-arena/types": "workspace:*",
+    "@coding-arena/utils": "workspace:*",
+    "@coding-arena/validation": "workspace:*",
+    "argon2": "^0.40.1",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.2.1",
+    "jsonwebtoken": "^9.0.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@coding-arena/eslint-config": "workspace:*",
+    "@coding-arena/tsconfig": "workspace:*",
+    "@types/cookie-parser": "^1.4.7",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jest": "^29.5.12",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/node": "^20.12.12",
+    "@types/supertest": "^6.0.2",
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0",
+    "supertest": "^7.0.0",
+    "ts-jest": "^29.1.2",
+    "tsx": "^4.10.5",
+    "typescript": "^5.4.5"
+  }
+}
