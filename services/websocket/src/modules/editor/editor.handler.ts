@@ -8,15 +8,21 @@ import { logger } from "@coding-arena/logger";
 export function registerEditorHandlers(
   socket: Socket,
   editorManager: EditorManager,
-  sessionManager: SessionManager
+  sessionManager: SessionManager,
 ) {
   const getUserId = () => socket.data.userId as string;
 
   socket.on(
     "editor:change",
     (
-      payload: { id: string; baseVersion: number; index: number; text: string; type: "insert" | "delete" },
-      callback?: (res: { success: boolean; data?: unknown; error?: string }) => void
+      payload: {
+        id: string;
+        baseVersion: number;
+        index: number;
+        text: string;
+        type: "insert" | "delete";
+      },
+      callback?: (res: { success: boolean; data?: unknown; error?: string }) => void,
     ) => {
       try {
         const userId = getUserId();
@@ -28,7 +34,10 @@ export function registerEditorHandlers(
         const roomId = session.activeRoomId;
         const { roomState, appliedOp } = editorManager.applyOperation(roomId, userId, payload);
 
-        logger.debug({ userId, roomId, version: roomState.version }, "Editor operation applied successfully");
+        logger.debug(
+          { userId, roomId, version: roomState.version },
+          "Editor operation applied successfully",
+        );
 
         if (callback) {
           callback({ success: true, data: appliedOp });
@@ -37,16 +46,19 @@ export function registerEditorHandlers(
         EventBroker.publish(DomainEventTypes.EDITOR_OPERATION_APPLIED, {
           type: DomainEventTypes.EDITOR_OPERATION_APPLIED,
           timestamp: new Date().toISOString(),
-          data: { roomId, appliedOp }
+          data: { roomId, appliedOp },
         });
       } catch (error) {
         const err = error as Error;
-        logger.error({ userId: getUserId(), error: err.message }, "Error applying editor operation");
+        logger.error(
+          { userId: getUserId(), error: err.message },
+          "Error applying editor operation",
+        );
         if (callback) {
           callback({ success: false, error: err.message });
         }
       }
-    }
+    },
   );
 
   socket.on(
@@ -62,7 +74,10 @@ export function registerEditorHandlers(
         const roomId = session.activeRoomId;
         const editorState = editorManager.getOrCreateEditor(roomId);
 
-        logger.info({ userId, roomId, version: editorState.version }, "Editor state synced successfully");
+        logger.info(
+          { userId, roomId, version: editorState.version },
+          "Editor state synced successfully",
+        );
 
         if (callback) {
           callback({ success: true, data: editorState });
@@ -74,6 +89,6 @@ export function registerEditorHandlers(
           callback({ success: false, error: err.message });
         }
       }
-    }
+    },
   );
 }

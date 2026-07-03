@@ -276,5 +276,5 @@ export interface DomainEvent<T = any> {
 export const DomainEventTypes = {
   ROOM_CREATED: "domain.room.created",
   ROOM_UPDATED: "domain.room.updated",
-  EDITOR_OPERATION_APPLIED: "domain.editor.operation_applied"
+  EDITOR_OPERATION_APPLIED: "domain.editor.operation_applied",
 } as const;

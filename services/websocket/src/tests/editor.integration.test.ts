@@ -7,7 +7,7 @@ import {
   EditorStateDTO,
   EditorOperationDTO,
   EventEnvelope,
-  RealtimeEvents
+  RealtimeEvents,
 } from "@coding-arena/api-contracts";
 
 describe("WebSocket Collaborative Editor Integration Tests", () => {
@@ -37,13 +37,13 @@ describe("WebSocket Collaborative Editor Integration Tests", () => {
     const clientA = Client(`http://localhost:${port}`, {
       auth: { token: tokenA },
       transports: ["websocket"],
-      autoConnect: false
+      autoConnect: false,
     });
 
     let clientB = Client(`http://localhost:${port}`, {
       auth: { token: tokenB },
       transports: ["websocket"],
-      autoConnect: false
+      autoConnect: false,
     });
 
     let roomId = "";
@@ -51,11 +51,15 @@ describe("WebSocket Collaborative Editor Integration Tests", () => {
     clientA.connect();
 
     clientA.on("connect", () => {
-      clientA.emit("room:create", { name: "Editor Lobby" }, (res: { success: boolean; data?: RoomStateDTO }) => {
-        expect(res.success).toBe(true);
-        roomId = res.data!.id;
-        clientB.connect();
-      });
+      clientA.emit(
+        "room:create",
+        { name: "Editor Lobby" },
+        (res: { success: boolean; data?: RoomStateDTO }) => {
+          expect(res.success).toBe(true);
+          roomId = res.data!.id;
+          clientB.connect();
+        },
+      );
     });
 
     clientB.on("connect", () => {
@@ -73,7 +77,7 @@ describe("WebSocket Collaborative Editor Integration Tests", () => {
             (changeRes: { success: boolean; data?: EditorOperationDTO }) => {
               expect(changeRes.success).toBe(true);
               expect(changeRes.data!.version).toBe(1);
-            }
+            },
           );
         });
       });
@@ -96,7 +100,7 @@ describe("WebSocket Collaborative Editor Integration Tests", () => {
             expect(changeRes.success).toBe(true);
             expect(changeRes.data!.version).toBe(2);
             clientB.disconnect();
-          }
+          },
         );
       }
     });
@@ -105,13 +109,17 @@ describe("WebSocket Collaborative Editor Integration Tests", () => {
 
     clientA.on(RealtimeEvents.ROOM_UPDATED, (envelope: EventEnvelope<RoomStateDTO>) => {
       const room = envelope.payload;
-      if (room.participants["user-b"] && !room.participants["user-b"].isConnected && !isReconnected) {
+      if (
+        room.participants["user-b"] &&
+        !room.participants["user-b"].isConnected &&
+        !isReconnected
+      ) {
         isReconnected = true;
 
         clientB = Client(`http://localhost:${port}`, {
           auth: { token: tokenB },
           transports: ["websocket"],
-          autoConnect: false
+          autoConnect: false,
         });
 
         clientB.connect();
@@ -138,13 +146,13 @@ describe("WebSocket Collaborative Editor Integration Tests", () => {
     const clientA = Client(`http://localhost:${port}`, {
       auth: { token: tokenA },
       transports: ["websocket"],
-      autoConnect: false
+      autoConnect: false,
     });
 
     const clientB = Client(`http://localhost:${port}`, {
       auth: { token: tokenB },
       transports: ["websocket"],
-      autoConnect: false
+      autoConnect: false,
     });
 
     let roomId = "";
@@ -152,11 +160,15 @@ describe("WebSocket Collaborative Editor Integration Tests", () => {
     clientA.connect();
 
     clientA.on("connect", () => {
-      clientA.emit("room:create", { name: "OT Test Lobby" }, (res: { success: boolean; data?: RoomStateDTO }) => {
-        expect(res.success).toBe(true);
-        roomId = res.data!.id;
-        clientB.connect();
-      });
+      clientA.emit(
+        "room:create",
+        { name: "OT Test Lobby" },
+        (res: { success: boolean; data?: RoomStateDTO }) => {
+          expect(res.success).toBe(true);
+          roomId = res.data!.id;
+          clientB.connect();
+        },
+      );
     });
 
     clientB.on("connect", () => {
@@ -187,7 +199,7 @@ describe("WebSocket Collaborative Editor Integration Tests", () => {
             expect(res.success).toBe(true);
             aliceChangeCompleted = true;
             checkCompletion();
-          }
+          },
         );
 
         clientB.emit(
@@ -197,7 +209,7 @@ describe("WebSocket Collaborative Editor Integration Tests", () => {
             expect(res.success).toBe(true);
             bobChangeCompleted = true;
             checkCompletion();
-          }
+          },
         );
       });
     });

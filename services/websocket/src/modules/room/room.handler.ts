@@ -8,7 +8,7 @@ import { logger } from "@coding-arena/logger";
 export function registerRoomHandlers(
   socket: Socket,
   roomManager: RoomManager,
-  sessionManager: SessionManager
+  sessionManager: SessionManager,
 ) {
   const getUserId = () => socket.data.userId as string;
   const getUsername = () => socket.data.username as string;
@@ -17,7 +17,7 @@ export function registerRoomHandlers(
     "room:create",
     (
       payload: { problemId?: string; name?: string } = {},
-      callback?: (res: { success: boolean; data?: unknown; error?: string }) => void
+      callback?: (res: { success: boolean; data?: unknown; error?: string }) => void,
     ) => {
       try {
         const userId = getUserId();
@@ -37,7 +37,7 @@ export function registerRoomHandlers(
         EventBroker.publish(DomainEventTypes.ROOM_UPDATED, {
           type: DomainEventTypes.ROOM_UPDATED,
           timestamp: new Date().toISOString(),
-          data: { roomId: room.id, roomState: room }
+          data: { roomId: room.id, roomState: room },
         });
       } catch (error) {
         const err = error as Error;
@@ -46,14 +46,14 @@ export function registerRoomHandlers(
           callback({ success: false, error: err.message });
         }
       }
-    }
+    },
   );
 
   socket.on(
     "room:join",
     (
       payload: { roomId: string },
-      callback?: (res: { success: boolean; data?: unknown; error?: string }) => void
+      callback?: (res: { success: boolean; data?: unknown; error?: string }) => void,
     ) => {
       try {
         const userId = getUserId();
@@ -74,19 +74,19 @@ export function registerRoomHandlers(
         EventBroker.publish(DomainEventTypes.ROOM_UPDATED, {
           type: DomainEventTypes.ROOM_UPDATED,
           timestamp: new Date().toISOString(),
-          data: { roomId, roomState: room }
+          data: { roomId, roomState: room },
         });
       } catch (error) {
         const err = error as Error;
         logger.error(
           { userId: getUserId(), roomId: payload.roomId, error: err.message },
-          "Error during room join"
+          "Error during room join",
         );
         if (callback) {
           callback({ success: false, error: err.message });
         }
       }
-    }
+    },
   );
 
   socket.on("room:leave", (callback?: (res: { success: boolean; error?: string }) => void) => {
@@ -113,7 +113,7 @@ export function registerRoomHandlers(
         EventBroker.publish(DomainEventTypes.ROOM_UPDATED, {
           type: DomainEventTypes.ROOM_UPDATED,
           timestamp: new Date().toISOString(),
-          data: { roomId, roomState: updatedRoom }
+          data: { roomId, roomState: updatedRoom },
         });
       }
     } catch (error) {
@@ -147,7 +147,7 @@ export function registerRoomHandlers(
         EventBroker.publish(DomainEventTypes.ROOM_UPDATED, {
           type: DomainEventTypes.ROOM_UPDATED,
           timestamp: new Date().toISOString(),
-          data: { roomId, roomState: room }
+          data: { roomId, roomState: room },
         });
       } catch (error) {
         const err = error as Error;
@@ -156,7 +156,7 @@ export function registerRoomHandlers(
           callback({ success: false, error: err.message });
         }
       }
-    }
+    },
   );
 
   socket.on("disconnect", () => {
@@ -168,12 +168,15 @@ export function registerRoomHandlers(
 
       const updatedRoom = roomManager.setUserConnectionStatus(roomId, userId, false);
 
-      logger.info({ userId, roomId }, "User connection lost, toggled presence isConnected to false");
+      logger.info(
+        { userId, roomId },
+        "User connection lost, toggled presence isConnected to false",
+      );
 
       EventBroker.publish(DomainEventTypes.ROOM_UPDATED, {
         type: DomainEventTypes.ROOM_UPDATED,
         timestamp: new Date().toISOString(),
-        data: { roomId, roomState: updatedRoom }
+        data: { roomId, roomState: updatedRoom },
       });
     }
   });

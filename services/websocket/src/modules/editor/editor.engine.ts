@@ -10,7 +10,9 @@ export class EditorEngine {
       return content.slice(0, index) + text + content.slice(index);
     } else if (type === "delete") {
       if (index + text.length > content.length) {
-        throw new Error(`Invalid deletion length. Cannot delete ${text.length} characters starting from index ${index}.`);
+        throw new Error(
+          `Invalid deletion length. Cannot delete ${text.length} characters starting from index ${index}.`,
+        );
       }
       return content.slice(0, index) + content.slice(index + text.length);
     }
@@ -35,7 +37,10 @@ export class EditorEngine {
     return transformed;
   }
 
-  private transformInsertInsert(op: EditorOperationDTO, appliedOp: EditorOperationDTO): EditorOperationDTO {
+  private transformInsertInsert(
+    op: EditorOperationDTO,
+    appliedOp: EditorOperationDTO,
+  ): EditorOperationDTO {
     const res = { ...op };
     if (appliedOp.index < op.index) {
       res.index += appliedOp.text.length;
@@ -47,7 +52,10 @@ export class EditorEngine {
     return res;
   }
 
-  private transformInsertDelete(op: EditorOperationDTO, appliedOp: EditorOperationDTO): EditorOperationDTO {
+  private transformInsertDelete(
+    op: EditorOperationDTO,
+    appliedOp: EditorOperationDTO,
+  ): EditorOperationDTO {
     const res = { ...op };
     const deleteLen = appliedOp.text.length;
     const deleteStart = appliedOp.index;
@@ -61,7 +69,10 @@ export class EditorEngine {
     return res;
   }
 
-  private transformDeleteInsert(op: EditorOperationDTO, appliedOp: EditorOperationDTO): EditorOperationDTO {
+  private transformDeleteInsert(
+    op: EditorOperationDTO,
+    appliedOp: EditorOperationDTO,
+  ): EditorOperationDTO {
     const res = { ...op };
     if (appliedOp.index <= op.index) {
       res.index += appliedOp.text.length;
@@ -69,7 +80,10 @@ export class EditorEngine {
     return res;
   }
 
-  private transformDeleteDelete(op: EditorOperationDTO, appliedOp: EditorOperationDTO): EditorOperationDTO {
+  private transformDeleteDelete(
+    op: EditorOperationDTO,
+    appliedOp: EditorOperationDTO,
+  ): EditorOperationDTO {
     const res = { ...op };
     const deleteLen = appliedOp.text.length;
     const deleteStart = appliedOp.index;

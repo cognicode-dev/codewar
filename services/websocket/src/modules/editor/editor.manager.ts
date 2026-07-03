@@ -14,7 +14,7 @@ export class EditorManager {
         roomId,
         content: "",
         version: 0,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
       this.editors.set(roomId, editor);
       this.operationLogs.set(roomId, []);
@@ -26,7 +26,13 @@ export class EditorManager {
   public applyOperation(
     roomId: string,
     userId: string,
-    opInput: { id: string; baseVersion: number; index: number; text: string; type: "insert" | "delete" }
+    opInput: {
+      id: string;
+      baseVersion: number;
+      index: number;
+      text: string;
+      type: "insert" | "delete";
+    },
   ): { roomState: EditorStateDTO; appliedOp: EditorOperationDTO } {
     const editor = this.getOrCreateEditor(roomId);
     let log = this.operationLogs.get(roomId);
@@ -44,7 +50,7 @@ export class EditorManager {
       timestamp: new Date().toISOString(),
       type: opInput.type,
       index: opInput.index,
-      text: opInput.text
+      text: opInput.text,
     };
 
     if (op.baseVersion < editor.version) {
@@ -53,7 +59,9 @@ export class EditorManager {
         op = this.engine.transform(op, appliedOp);
       }
     } else if (op.baseVersion > editor.version) {
-      throw new Error(`Client baseVersion ${op.baseVersion} is in the future. Current version: ${editor.version}`);
+      throw new Error(
+        `Client baseVersion ${op.baseVersion} is in the future. Current version: ${editor.version}`,
+      );
     }
 
     editor.content = this.engine.apply(editor.content, op.type, op.index, op.text);

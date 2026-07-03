@@ -13,7 +13,7 @@ import {
   DomainEventTypes,
   DomainEvent,
   RoomStateDTO,
-  EditorOperationDTO
+  EditorOperationDTO,
 } from "@coding-arena/api-contracts";
 import { logger } from "@coding-arena/logger";
 import { EditorManager } from "./modules/editor/editor.manager";
@@ -29,8 +29,8 @@ const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
     origin: "*",
-    methods: ["GET", "POST"]
-  }
+    methods: ["GET", "POST"],
+  },
 });
 
 io.use(socketAuthMiddleware);
@@ -54,12 +54,15 @@ io.on("connection", (socket) => {
     try {
       const updatedRoom = roomManager.setUserConnectionStatus(session.activeRoomId, userId, true);
       socket.join(`room:${session.activeRoomId}`);
-      logger.info({ userId, roomId: session.activeRoomId }, "User reconnected, restored connection status");
-      
+      logger.info(
+        { userId, roomId: session.activeRoomId },
+        "User reconnected, restored connection status",
+      );
+
       EventBroker.publish(DomainEventTypes.ROOM_UPDATED, {
         type: DomainEventTypes.ROOM_UPDATED,
         timestamp: new Date().toISOString(),
-        data: { roomId: session.activeRoomId, roomState: updatedRoom }
+        data: { roomId: session.activeRoomId, roomState: updatedRoom },
       });
     } catch {
       sessionManager.leaveRoom(userId);
@@ -79,15 +82,21 @@ io.on("connection", (socket) => {
 });
 
 // Domain Event Listeners (WebSocket Notifier)
-EventBroker.subscribe(DomainEventTypes.ROOM_UPDATED, (event: DomainEvent<{ roomId: string; roomState: RoomStateDTO }>) => {
-  const { roomId, roomState } = event.data;
-  connectionRegistry.sendToRoom(io, roomId, RealtimeEvents.ROOM_UPDATED, roomState);
-});
+EventBroker.subscribe(
+  DomainEventTypes.ROOM_UPDATED,
+  (event: DomainEvent<{ roomId: string; roomState: RoomStateDTO }>) => {
+    const { roomId, roomState } = event.data;
+    connectionRegistry.sendToRoom(io, roomId, RealtimeEvents.ROOM_UPDATED, roomState);
+  },
+);
 
-EventBroker.subscribe(DomainEventTypes.EDITOR_OPERATION_APPLIED, (event: DomainEvent<{ roomId: string; appliedOp: EditorOperationDTO }>) => {
-  const { roomId, appliedOp } = event.data;
-  connectionRegistry.sendToRoom(io, roomId, RealtimeEvents.EDITOR_CHANGE, appliedOp);
-});
+EventBroker.subscribe(
+  DomainEventTypes.EDITOR_OPERATION_APPLIED,
+  (event: DomainEvent<{ roomId: string; appliedOp: EditorOperationDTO }>) => {
+    const { roomId, appliedOp } = event.data;
+    connectionRegistry.sendToRoom(io, roomId, RealtimeEvents.EDITOR_CHANGE, appliedOp);
+  },
+);
 
 EventBroker.subscribe("submission:updated", (payload) => {
   const { userId, submissionId, status, verdict, timeMs, memoryMb } = payload;
@@ -97,7 +106,7 @@ EventBroker.subscribe("submission:updated", (payload) => {
     status,
     verdict,
     timeMs,
-    memoryMb
+    memoryMb,
   });
 });
 
