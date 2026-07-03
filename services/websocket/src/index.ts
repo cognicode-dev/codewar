@@ -10,6 +10,8 @@ import { ConnectionRegistry } from "./registry/connection.registry";
 import { SessionManager } from "./modules/session/session.manager";
 import { RealtimeEvents } from "@coding-arena/api-contracts";
 import { logger } from "@coding-arena/logger";
+import { EditorManager } from "./modules/editor/editor.manager";
+import { registerEditorHandlers } from "./modules/editor/editor.handler";
 
 const app = express();
 const port = process.env.PORT || 3002;
@@ -21,13 +23,14 @@ const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
     origin: "*",
-    methods: ["GET", "POST"]
-  }
+    methods: ["GET", "POST"],
+  },
 });
 
 io.use(socketAuthMiddleware);
 
 const roomManager = new RoomManager();
+const editorManager = new EditorManager();
 const connectionRegistry = new ConnectionRegistry();
 const sessionManager = new SessionManager();
 
@@ -45,17 +48,29 @@ io.on("connection", (socket) => {
     try {
       const updatedRoom = roomManager.setUserConnectionStatus(session.activeRoomId, userId, true);
       socket.join(`room:${session.activeRoomId}`);
-      logger.info({ userId, roomId: session.activeRoomId }, "User reconnected, restored connection status");
-      connectionRegistry.sendToRoom(io, session.activeRoomId, RealtimeEvents.ROOM_UPDATED, updatedRoom);
+      logger.info(
+        { userId, roomId: session.activeRoomId },
+        "User reconnected, restored connection status",
+      );
+      connectionRegistry.sendToRoom(
+        io,
+        session.activeRoomId,
+        RealtimeEvents.ROOM_UPDATED,
+        updatedRoom,
+      );
     } catch {
       sessionManager.leaveRoom(userId);
     }
   }
 
   registerRoomHandlers(io, socket, roomManager, connectionRegistry, sessionManager);
+  registerEditorHandlers(io, socket, editorManager, connectionRegistry, sessionManager);
 
   socket.on("disconnect", () => {
-    logger.info({ userId, username, socketId: socket.id }, "User disconnected from websocket service");
+    logger.info(
+      { userId, username, socketId: socket.id },
+      "User disconnected from websocket service",
+    );
     connectionRegistry.deregister(userId, socket.id);
   });
 });
@@ -68,7 +83,7 @@ EventBroker.subscribe("submission:updated", (payload) => {
     status,
     verdict,
     timeMs,
-    memoryMb
+    memoryMb,
   });
 });
 

@@ -2,7 +2,12 @@ import { io as Client } from "socket.io-client";
 import { httpServer, io } from "../index";
 import jwt from "jsonwebtoken";
 import { env } from "@coding-arena/config";
-import { RoomStateDTO, EventEnvelope, RealtimeEvents, RoomStatus } from "@coding-arena/api-contracts";
+import {
+  RoomStateDTO,
+  EventEnvelope,
+  RealtimeEvents,
+  RoomStatus,
+} from "@coding-arena/api-contracts";
 
 describe("WebSocket Room System Integration Tests", () => {
   let port: number;
@@ -33,13 +38,13 @@ describe("WebSocket Room System Integration Tests", () => {
     const clientA = Client(`http://localhost:${port}`, {
       auth: { token: tokenA },
       transports: ["websocket"],
-      autoConnect: false
+      autoConnect: false,
     });
 
     const clientB = Client(`http://localhost:${port}`, {
       auth: { token: tokenB },
       transports: ["websocket"],
-      autoConnect: false
+      autoConnect: false,
     });
 
     let targetRoomId = "";
@@ -61,7 +66,7 @@ describe("WebSocket Room System Integration Tests", () => {
 
           targetRoomId = room.id;
           clientB.connect();
-        }
+        },
       );
     });
 
@@ -75,7 +80,7 @@ describe("WebSocket Room System Integration Tests", () => {
           expect(room.participants["user-b"]).toBeDefined();
           expect(room.participants["user-b"].isReady).toBe(false);
           expect(room.participants["user-b"].isConnected).toBe(true);
-        }
+        },
       );
     });
 
@@ -105,7 +110,7 @@ describe("WebSocket Room System Integration Tests", () => {
           (res: { success: boolean; data?: RoomStateDTO; error?: string }) => {
             expect(res.success).toBe(true);
             expect(res.data!.participants["user-b"].isReady).toBe(true);
-          }
+          },
         );
       } else if (updateCount === 3) {
         expect(room.participants["user-b"].isReady).toBe(true);

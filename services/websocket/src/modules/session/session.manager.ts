@@ -18,7 +18,7 @@ export class SessionManager {
         username,
         activeRoomId: null,
         status: "ACTIVE",
-        lastConnectedAt: new Date().toISOString()
+        lastConnectedAt: new Date().toISOString(),
       };
       this.sessions.set(userId, session);
     } else {

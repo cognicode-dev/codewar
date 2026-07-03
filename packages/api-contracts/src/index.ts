@@ -201,7 +201,7 @@ export enum RoomStatus {
   COUNTDOWN = "COUNTDOWN",
   ACTIVE = "ACTIVE",
   FINISHED = "FINISHED",
-  CLOSED = "CLOSED"
+  CLOSED = "CLOSED",
 }
 
 export interface ParticipantDTO {
@@ -226,7 +226,9 @@ export interface RoomStateDTO {
 export const RealtimeEvents = {
   SUBMISSION_UPDATED: "submission.updated",
   ROOM_UPDATED: "room.updated",
-  ERROR: "error"
+  EDITOR_CHANGE: "editor.change",
+  EDITOR_SYNC: "editor.sync",
+  ERROR: "error",
 } as const;
 
 export interface EventEnvelope<T = any> {
@@ -245,3 +247,19 @@ export interface SubmissionUpdatedPayload {
 }
 
 export type RoomUpdatedPayload = RoomStateDTO;
+
+export interface EditorOperationDTO {
+  userId: string;
+  roomId: string;
+  version: number;
+  index: number;
+  text: string;
+  type: "insert" | "delete";
+}
+
+export interface EditorStateDTO {
+  roomId: string;
+  content: string;
+  version: number;
+  updatedAt: string;
+}

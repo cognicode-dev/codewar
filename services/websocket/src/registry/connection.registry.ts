@@ -33,7 +33,7 @@ export class ConnectionRegistry {
         event,
         timestamp: new Date().toISOString(),
         correlationId,
-        payload
+        payload,
       };
 
       for (const socket of sockets) {
@@ -42,12 +42,18 @@ export class ConnectionRegistry {
     }
   }
 
-  public sendToRoom<T>(io: Server, roomId: string, event: string, payload: T, correlationId?: string): void {
+  public sendToRoom<T>(
+    io: Server,
+    roomId: string,
+    event: string,
+    payload: T,
+    correlationId?: string,
+  ): void {
     const envelope: EventEnvelope<T> = {
       event,
       timestamp: new Date().toISOString(),
       correlationId,
-      payload
+      payload,
     };
 
     io.to(`room:${roomId}`).emit(event, envelope);

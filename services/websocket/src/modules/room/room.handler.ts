@@ -10,7 +10,7 @@ export function registerRoomHandlers(
   socket: Socket,
   roomManager: RoomManager,
   connectionRegistry: ConnectionRegistry,
-  sessionManager: SessionManager
+  sessionManager: SessionManager,
 ) {
   const getUserId = () => socket.data.userId as string;
   const getUsername = () => socket.data.username as string;
@@ -19,7 +19,7 @@ export function registerRoomHandlers(
     "room:create",
     (
       payload: { problemId?: string; name?: string } = {},
-      callback?: (res: { success: boolean; data?: unknown; error?: string }) => void
+      callback?: (res: { success: boolean; data?: unknown; error?: string }) => void,
     ) => {
       try {
         const userId = getUserId();
@@ -44,12 +44,15 @@ export function registerRoomHandlers(
           callback({ success: false, error: err.message });
         }
       }
-    }
+    },
   );
 
   socket.on(
     "room:join",
-    (payload: { roomId: string }, callback?: (res: { success: boolean; data?: unknown; error?: string }) => void) => {
+    (
+      payload: { roomId: string },
+      callback?: (res: { success: boolean; data?: unknown; error?: string }) => void,
+    ) => {
       try {
         const userId = getUserId();
         const username = getUsername();
@@ -69,12 +72,15 @@ export function registerRoomHandlers(
         connectionRegistry.sendToRoom(io, roomId, RealtimeEvents.ROOM_UPDATED, room);
       } catch (error) {
         const err = error as Error;
-        logger.error({ userId: getUserId(), roomId: payload.roomId, error: err.message }, "Error during room join");
+        logger.error(
+          { userId: getUserId(), roomId: payload.roomId, error: err.message },
+          "Error during room join",
+        );
         if (callback) {
           callback({ success: false, error: err.message });
         }
       }
-    }
+    },
   );
 
   socket.on("room:leave", (callback?: (res: { success: boolean; error?: string }) => void) => {
@@ -109,31 +115,34 @@ export function registerRoomHandlers(
     }
   });
 
-  socket.on("room:ready", (callback?: (res: { success: boolean; data?: unknown; error?: string }) => void) => {
-    try {
-      const userId = getUserId();
-      const session = sessionManager.getSession(userId);
-      if (!session || !session.activeRoomId) {
-        throw new Error("Not in a room");
+  socket.on(
+    "room:ready",
+    (callback?: (res: { success: boolean; data?: unknown; error?: string }) => void) => {
+      try {
+        const userId = getUserId();
+        const session = sessionManager.getSession(userId);
+        if (!session || !session.activeRoomId) {
+          throw new Error("Not in a room");
+        }
+
+        const room = roomManager.toggleReady(session.activeRoomId, userId);
+
+        logger.info({ userId, roomId: session.activeRoomId }, "User toggled ready state");
+
+        if (callback) {
+          callback({ success: true, data: room });
+        }
+
+        connectionRegistry.sendToRoom(io, session.activeRoomId, RealtimeEvents.ROOM_UPDATED, room);
+      } catch (error) {
+        const err = error as Error;
+        logger.error({ userId: getUserId(), error: err.message }, "Error toggling ready state");
+        if (callback) {
+          callback({ success: false, error: err.message });
+        }
       }
-
-      const room = roomManager.toggleReady(session.activeRoomId, userId);
-
-      logger.info({ userId, roomId: session.activeRoomId }, "User toggled ready state");
-
-      if (callback) {
-        callback({ success: true, data: room });
-      }
-
-      connectionRegistry.sendToRoom(io, session.activeRoomId, RealtimeEvents.ROOM_UPDATED, room);
-    } catch (error) {
-      const err = error as Error;
-      logger.error({ userId: getUserId(), error: err.message }, "Error toggling ready state");
-      if (callback) {
-        callback({ success: false, error: err.message });
-      }
-    }
-  });
+    },
+  );
 
   socket.on("disconnect", () => {
     const userId = getUserId();
@@ -145,7 +154,10 @@ export function registerRoomHandlers(
       // Autoritative connection tracking: mark user isConnected: false on disconnect
       const updatedRoom = roomManager.setUserConnectionStatus(roomId, userId, false);
 
-      logger.info({ userId, roomId }, "User connection lost, toggled presence isConnected to false");
+      logger.info(
+        { userId, roomId },
+        "User connection lost, toggled presence isConnected to false",
+      );
       connectionRegistry.sendToRoom(io, roomId, RealtimeEvents.ROOM_UPDATED, updatedRoom);
     }
   });

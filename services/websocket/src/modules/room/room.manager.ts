@@ -8,7 +8,7 @@ export class RoomManager {
     hostId: string,
     hostUsername: string,
     problemId: string | null = null,
-    name?: string
+    name?: string,
   ): RoomStateDTO {
     const roomId = crypto.randomUUID();
     const joinedAt = new Date().toISOString();
@@ -18,7 +18,7 @@ export class RoomManager {
       username: hostUsername,
       isReady: true,
       isConnected: true,
-      joinedAt
+      joinedAt,
     };
 
     const room: RoomStateDTO = {
@@ -28,10 +28,10 @@ export class RoomManager {
       status: RoomStatus.CREATED,
       problemId,
       participants: {
-        [hostId]: hostParticipant
+        [hostId]: hostParticipant,
       },
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     };
 
     this.rooms.set(roomId, room);
@@ -64,7 +64,7 @@ export class RoomManager {
       username,
       isReady: false,
       isConnected: true,
-      joinedAt: new Date().toISOString()
+      joinedAt: new Date().toISOString(),
     };
 
     room.participants[userId] = participant;
@@ -127,7 +127,11 @@ export class RoomManager {
     return room;
   }
 
-  public setUserConnectionStatus(roomId: string, userId: string, isConnected: boolean): RoomStateDTO {
+  public setUserConnectionStatus(
+    roomId: string,
+    userId: string,
+    isConnected: boolean,
+  ): RoomStateDTO {
     const room = this.rooms.get(roomId);
     if (!room) {
       throw new Error("Room not found");
