@@ -209,6 +209,7 @@ export interface ParticipantDTO {
   username: string;
   isReady: boolean;
   isConnected: boolean;
+  team: "red" | "blue" | "spectator" | null;
   joinedAt: string;
 }
 
@@ -277,4 +278,6 @@ export const DomainEventTypes = {
   ROOM_CREATED: "domain.room.created",
   ROOM_UPDATED: "domain.room.updated",
   EDITOR_OPERATION_APPLIED: "domain.editor.operation_applied",
+  MATCH_STARTED: "domain.match.started",
+  MATCH_FINISHED: "domain.match.finished"
 } as const;

@@ -8,7 +8,7 @@ export class RoomManager {
     hostId: string,
     hostUsername: string,
     problemId: string | null = null,
-    name?: string,
+    name?: string
   ): RoomStateDTO {
     const roomId = crypto.randomUUID();
     const joinedAt = new Date().toISOString();
@@ -18,7 +18,8 @@ export class RoomManager {
       username: hostUsername,
       isReady: true,
       isConnected: true,
-      joinedAt,
+      team: null,
+      joinedAt
     };
 
     const room: RoomStateDTO = {
@@ -28,10 +29,10 @@ export class RoomManager {
       status: RoomStatus.CREATED,
       problemId,
       participants: {
-        [hostId]: hostParticipant,
+        [hostId]: hostParticipant
       },
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
     this.rooms.set(roomId, room);
@@ -53,7 +54,6 @@ export class RoomManager {
     }
 
     if (room.participants[userId]) {
-      // Reconnecting or already in room, ensure marked connected
       room.participants[userId].isConnected = true;
       room.updatedAt = new Date().toISOString();
       return room;
@@ -64,12 +64,12 @@ export class RoomManager {
       username,
       isReady: false,
       isConnected: true,
-      joinedAt: new Date().toISOString(),
+      team: null,
+      joinedAt: new Date().toISOString()
     };
 
     room.participants[userId] = participant;
 
-    // Transition from CREATED to WAITING if more participants join
     if (room.status === RoomStatus.CREATED) {
       room.status = RoomStatus.WAITING;
     }
@@ -130,7 +130,7 @@ export class RoomManager {
   public setUserConnectionStatus(
     roomId: string,
     userId: string,
-    isConnected: boolean,
+    isConnected: boolean
   ): RoomStateDTO {
     const room = this.rooms.get(roomId);
     if (!room) {
@@ -142,6 +142,61 @@ export class RoomManager {
       participant.isConnected = isConnected;
     }
 
+    room.updatedAt = new Date().toISOString();
+    return room;
+  }
+
+  public selectProblem(roomId: string, hostId: string, problemId: string): RoomStateDTO {
+    const room = this.rooms.get(roomId);
+    if (!room) {
+      throw new Error("Room not found");
+    }
+    if (room.hostId !== hostId) {
+      throw new Error("Only the host can select a problem");
+    }
+    const validStatesForProblemSelect = [RoomStatus.CREATED, RoomStatus.WAITING, RoomStatus.READY_CHECK];
+    if (!validStatesForProblemSelect.includes(room.status)) {
+      throw new Error("Cannot select a problem after the match has started");
+    }
+    room.problemId = problemId;
+    room.updatedAt = new Date().toISOString();
+    return room;
+  }
+
+  public assignTeam(
+    roomId: string,
+    userId: string,
+    team: "red" | "blue" | "spectator" | null
+  ): RoomStateDTO {
+    const room = this.rooms.get(roomId);
+    if (!room) {
+      throw new Error("Room not found");
+    }
+    if (
+      room.status !== RoomStatus.CREATED &&
+      room.status !== RoomStatus.WAITING &&
+      room.status !== RoomStatus.READY_CHECK
+    ) {
+      throw new Error("Cannot assign team during active or finished matches");
+    }
+    const participant = room.participants[userId];
+    if (!participant) {
+      throw new Error("Participant not in room");
+    }
+    participant.team = team;
+    room.updatedAt = new Date().toISOString();
+    return room;
+  }
+
+  public finishMatch(roomId: string, _winnerUserId: string): RoomStateDTO {
+    const room = this.rooms.get(roomId);
+    if (!room) {
+      throw new Error("Room not found");
+    }
+    if (room.status !== RoomStatus.ACTIVE) {
+      throw new Error("Cannot finish a match that is not active");
+    }
+    room.status = RoomStatus.FINISHED;
     room.updatedAt = new Date().toISOString();
     return room;
   }

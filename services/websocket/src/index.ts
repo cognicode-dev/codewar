@@ -14,6 +14,7 @@ import {
   DomainEvent,
   RoomStateDTO,
   EditorOperationDTO,
+  RoomStatus
 } from "@coding-arena/api-contracts";
 import { logger } from "@coding-arena/logger";
 import { EditorManager } from "./modules/editor/editor.manager";
@@ -106,8 +107,32 @@ EventBroker.subscribe("submission:updated", (payload) => {
     status,
     verdict,
     timeMs,
-    memoryMb,
+    memoryMb
   });
+
+  if (status === "COMPLETED" && verdict === "ACCEPTED") {
+    const session = sessionManager.getSession(userId);
+    if (session && session.activeRoomId) {
+      const roomId = session.activeRoomId;
+      const room = roomManager.getRoom(roomId);
+      if (room && room.status === RoomStatus.ACTIVE) {
+        const finishedRoom = roomManager.finishMatch(roomId, userId);
+        logger.info({ roomId, winnerUserId: userId }, "Match completed, winner declared");
+
+        EventBroker.publish(DomainEventTypes.ROOM_UPDATED, {
+          type: DomainEventTypes.ROOM_UPDATED,
+          timestamp: new Date().toISOString(),
+          data: { roomId, roomState: finishedRoom }
+        });
+
+        EventBroker.publish(DomainEventTypes.MATCH_FINISHED, {
+          type: DomainEventTypes.MATCH_FINISHED,
+          timestamp: new Date().toISOString(),
+          data: { roomId, matchState: finishedRoom, winnerUserId: userId }
+        });
+      }
+    }
+  }
 });
 
 if (process.env.NODE_ENV !== "test") {
