@@ -424,6 +424,9 @@ importers:
       '@coding-arena/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@coding-arena/logger':
+        specifier: workspace:*
+        version: link:../../packages/logger
       '@coding-arena/types':
         specifier: workspace:*
         version: link:../../packages/types

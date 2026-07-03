@@ -195,15 +195,20 @@ export interface CreateSubmissionRequest {
 }
 
 export enum RoomStatus {
-  LOBBY = "LOBBY",
-  PLAYING = "PLAYING",
+  CREATED = "CREATED",
+  WAITING = "WAITING",
+  READY_CHECK = "READY_CHECK",
+  COUNTDOWN = "COUNTDOWN",
+  ACTIVE = "ACTIVE",
   FINISHED = "FINISHED",
+  CLOSED = "CLOSED"
 }
 
 export interface ParticipantDTO {
   userId: string;
   username: string;
   isReady: boolean;
+  isConnected: boolean;
   joinedAt: string;
 }
 
@@ -215,6 +220,7 @@ export interface RoomStateDTO {
   problemId: string | null;
   participants: Record<string, ParticipantDTO>;
   createdAt: string;
+  updatedAt: string;
 }
 
 export const RealtimeEvents = {

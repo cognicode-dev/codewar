@@ -1,5 +1,5 @@
 import { io as Client } from "socket.io-client";
-import { httpServer } from "../index";
+import { httpServer, io } from "../index";
 import jwt from "jsonwebtoken";
 import { env } from "@coding-arena/config";
 import { EventBroker } from "@coding-arena/utils";
@@ -17,7 +17,10 @@ describe("WebSocket Service Integration Tests", () => {
   });
 
   afterAll((done) => {
-    httpServer.close(done);
+    io.sockets.sockets.forEach((socket) => {
+      socket.disconnect(true);
+    });
+    io.close(done);
   });
 
   const createToken = (sub: string, username: string) => {

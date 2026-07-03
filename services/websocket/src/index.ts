@@ -9,6 +9,7 @@ import { registerRoomHandlers } from "./modules/room/room.handler";
 import { ConnectionRegistry } from "./registry/connection.registry";
 import { SessionManager } from "./modules/session/session.manager";
 import { RealtimeEvents } from "@coding-arena/api-contracts";
+import { logger } from "@coding-arena/logger";
 
 const app = express();
 const port = process.env.PORT || 3002;
@@ -34,22 +35,34 @@ io.on("connection", (socket) => {
   const userId = socket.data.userId as string;
   const username = socket.data.username as string;
 
-  console.log(`[WebSocket Service] User ${username} (${userId}) connected on socket ${socket.id}`);
+  logger.info({ userId, username, socketId: socket.id }, "User connected to websocket service");
 
   connectionRegistry.register(userId, socket);
-  sessionManager.getOrCreateSession(userId, username);
+  const session = sessionManager.getOrCreateSession(userId, username);
+
+  // Restore room socket membership and connection status upon reconnection
+  if (session.activeRoomId) {
+    try {
+      const updatedRoom = roomManager.setUserConnectionStatus(session.activeRoomId, userId, true);
+      socket.join(`room:${session.activeRoomId}`);
+      logger.info({ userId, roomId: session.activeRoomId }, "User reconnected, restored connection status");
+      connectionRegistry.sendToRoom(io, session.activeRoomId, RealtimeEvents.ROOM_UPDATED, updatedRoom);
+    } catch {
+      sessionManager.leaveRoom(userId);
+    }
+  }
 
   registerRoomHandlers(io, socket, roomManager, connectionRegistry, sessionManager);
 
   socket.on("disconnect", () => {
-    console.log(`[WebSocket Service] User ${username} disconnected from socket ${socket.id}`);
+    logger.info({ userId, username, socketId: socket.id }, "User disconnected from websocket service");
     connectionRegistry.deregister(userId, socket.id);
   });
 });
 
 EventBroker.subscribe("submission:updated", (payload) => {
   const { userId, submissionId, status, verdict, timeMs, memoryMb } = payload;
-  console.log(`[WebSocket Service] Broadcasting submission update ${submissionId} to user ${userId}`);
+  logger.info({ userId, submissionId }, "Broadcasting submission update payload");
   connectionRegistry.sendToUser(userId, RealtimeEvents.SUBMISSION_UPDATED, {
     submissionId,
     status,
@@ -61,7 +74,7 @@ EventBroker.subscribe("submission:updated", (payload) => {
 
 if (process.env.NODE_ENV !== "test") {
   httpServer.listen(port, () => {
-    console.log(`[WebSocket Service] running on port ${port}`);
+    logger.info({ port }, "WebSocket Service running");
   });
 }
 

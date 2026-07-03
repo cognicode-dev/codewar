@@ -8,7 +8,7 @@ export class RoomManager {
     hostId: string,
     hostUsername: string,
     problemId: string | null = null,
-    name?: string,
+    name?: string
   ): RoomStateDTO {
     const roomId = crypto.randomUUID();
     const joinedAt = new Date().toISOString();
@@ -17,19 +17,21 @@ export class RoomManager {
       userId: hostId,
       username: hostUsername,
       isReady: true,
-      joinedAt,
+      isConnected: true,
+      joinedAt
     };
 
     const room: RoomStateDTO = {
       id: roomId,
       name: name || `Room of ${hostUsername}`,
       hostId,
-      status: RoomStatus.LOBBY,
+      status: RoomStatus.CREATED,
       problemId,
       participants: {
-        [hostId]: hostParticipant,
+        [hostId]: hostParticipant
       },
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
     this.rooms.set(roomId, room);
@@ -46,11 +48,14 @@ export class RoomManager {
       throw new Error("Room not found");
     }
 
-    if (room.status !== RoomStatus.LOBBY) {
-      throw new Error("Cannot join a room that has already started or finished");
+    if (room.status === RoomStatus.FINISHED || room.status === RoomStatus.CLOSED) {
+      throw new Error("Cannot join a room that is finished or closed");
     }
 
     if (room.participants[userId]) {
+      // Reconnecting or already in room, ensure marked connected
+      room.participants[userId].isConnected = true;
+      room.updatedAt = new Date().toISOString();
       return room;
     }
 
@@ -58,10 +63,18 @@ export class RoomManager {
       userId,
       username,
       isReady: false,
-      joinedAt: new Date().toISOString(),
+      isConnected: true,
+      joinedAt: new Date().toISOString()
     };
 
     room.participants[userId] = participant;
+
+    // Transition from CREATED to WAITING if more participants join
+    if (room.status === RoomStatus.CREATED) {
+      room.status = RoomStatus.WAITING;
+    }
+
+    room.updatedAt = new Date().toISOString();
     return room;
   }
 
@@ -75,6 +88,8 @@ export class RoomManager {
 
     const remainingUserIds = Object.keys(room.participants);
     if (remainingUserIds.length === 0) {
+      room.status = RoomStatus.CLOSED;
+      room.updatedAt = new Date().toISOString();
       this.rooms.delete(roomId);
       return null;
     }
@@ -87,6 +102,7 @@ export class RoomManager {
       }
     }
 
+    room.updatedAt = new Date().toISOString();
     return room;
   }
 
@@ -96,8 +112,9 @@ export class RoomManager {
       throw new Error("Room not found");
     }
 
-    if (room.status !== RoomStatus.LOBBY) {
-      throw new Error("Cannot change ready status during a match");
+    const validStatesForReady = [RoomStatus.CREATED, RoomStatus.WAITING, RoomStatus.READY_CHECK];
+    if (!validStatesForReady.includes(room.status)) {
+      throw new Error("Cannot change ready status during active or finished matches");
     }
 
     const participant = room.participants[userId];
@@ -106,6 +123,22 @@ export class RoomManager {
     }
 
     participant.isReady = !participant.isReady;
+    room.updatedAt = new Date().toISOString();
+    return room;
+  }
+
+  public setUserConnectionStatus(roomId: string, userId: string, isConnected: boolean): RoomStateDTO {
+    const room = this.rooms.get(roomId);
+    if (!room) {
+      throw new Error("Room not found");
+    }
+
+    const participant = room.participants[userId];
+    if (participant) {
+      participant.isConnected = isConnected;
+    }
+
+    room.updatedAt = new Date().toISOString();
     return room;
   }
 
@@ -115,6 +148,7 @@ export class RoomManager {
       throw new Error("Room not found");
     }
     room.problemId = problemId;
+    room.updatedAt = new Date().toISOString();
     return room;
   }
 
@@ -124,6 +158,7 @@ export class RoomManager {
       throw new Error("Room not found");
     }
     room.status = status;
+    room.updatedAt = new Date().toISOString();
     return room;
   }
 }

@@ -3,6 +3,7 @@ import { RoomManager } from "./room.manager";
 import { ConnectionRegistry } from "../../registry/connection.registry";
 import { SessionManager } from "../session/session.manager";
 import { RealtimeEvents } from "@coding-arena/api-contracts";
+import { logger } from "@coding-arena/logger";
 
 export function registerRoomHandlers(
   io: Server,
@@ -29,6 +30,8 @@ export function registerRoomHandlers(
         sessionManager.joinRoom(userId, room.id);
         socket.join(`room:${room.id}`);
 
+        logger.info({ userId, roomId: room.id }, "Room created successfully by host");
+
         if (callback) {
           callback({ success: true, data: room });
         }
@@ -36,6 +39,7 @@ export function registerRoomHandlers(
         connectionRegistry.sendToRoom(io, room.id, RealtimeEvents.ROOM_UPDATED, room);
       } catch (error) {
         const err = error as Error;
+        logger.error({ userId: getUserId(), error: err.message }, "Error during room creation");
         if (callback) {
           callback({ success: false, error: err.message });
         }
@@ -56,6 +60,8 @@ export function registerRoomHandlers(
         sessionManager.joinRoom(userId, roomId);
         socket.join(`room:${roomId}`);
 
+        logger.info({ userId, roomId }, "User joined room successfully");
+
         if (callback) {
           callback({ success: true, data: room });
         }
@@ -63,6 +69,7 @@ export function registerRoomHandlers(
         connectionRegistry.sendToRoom(io, roomId, RealtimeEvents.ROOM_UPDATED, room);
       } catch (error) {
         const err = error as Error;
+        logger.error({ userId: getUserId(), roomId: payload.roomId, error: err.message }, "Error during room join");
         if (callback) {
           callback({ success: false, error: err.message });
         }
@@ -84,6 +91,8 @@ export function registerRoomHandlers(
 
       const updatedRoom = roomManager.leaveRoom(roomId, userId);
 
+      logger.info({ userId, roomId }, "User left room explicitly");
+
       if (callback) {
         callback({ success: true });
       }
@@ -93,6 +102,7 @@ export function registerRoomHandlers(
       }
     } catch (error) {
       const err = error as Error;
+      logger.error({ userId: getUserId(), error: err.message }, "Error during room leave");
       if (callback) {
         callback({ success: false, error: err.message });
       }
@@ -109,6 +119,8 @@ export function registerRoomHandlers(
 
       const room = roomManager.toggleReady(session.activeRoomId, userId);
 
+      logger.info({ userId, roomId: session.activeRoomId }, "User toggled ready state");
+
       if (callback) {
         callback({ success: true, data: room });
       }
@@ -116,6 +128,7 @@ export function registerRoomHandlers(
       connectionRegistry.sendToRoom(io, session.activeRoomId, RealtimeEvents.ROOM_UPDATED, room);
     } catch (error) {
       const err = error as Error;
+      logger.error({ userId: getUserId(), error: err.message }, "Error toggling ready state");
       if (callback) {
         callback({ success: false, error: err.message });
       }
@@ -129,11 +142,11 @@ export function registerRoomHandlers(
       const roomId = session.activeRoomId;
       sessionManager.disconnectSession(userId);
 
-      sessionManager.leaveRoom(userId);
-      const updatedRoom = roomManager.leaveRoom(roomId, userId);
-      if (updatedRoom) {
-        connectionRegistry.sendToRoom(io, roomId, RealtimeEvents.ROOM_UPDATED, updatedRoom);
-      }
+      // Autoritative connection tracking: mark user isConnected: false on disconnect
+      const updatedRoom = roomManager.setUserConnectionStatus(roomId, userId, false);
+
+      logger.info({ userId, roomId }, "User connection lost, toggled presence isConnected to false");
+      connectionRegistry.sendToRoom(io, roomId, RealtimeEvents.ROOM_UPDATED, updatedRoom);
     }
   });
 }

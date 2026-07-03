@@ -1,8 +1,8 @@
 import { io as Client } from "socket.io-client";
-import { httpServer } from "../index";
+import { httpServer, io } from "../index";
 import jwt from "jsonwebtoken";
 import { env } from "@coding-arena/config";
-import { RoomStateDTO, EventEnvelope, RealtimeEvents } from "@coding-arena/api-contracts";
+import { RoomStateDTO, EventEnvelope, RealtimeEvents, RoomStatus } from "@coding-arena/api-contracts";
 
 describe("WebSocket Room System Integration Tests", () => {
   let port: number;
@@ -16,7 +16,10 @@ describe("WebSocket Room System Integration Tests", () => {
   });
 
   afterAll((done) => {
-    httpServer.close(done);
+    io.sockets.sockets.forEach((socket) => {
+      socket.disconnect(true);
+    });
+    io.close(done);
   });
 
   const createToken = (sub: string, username: string) => {
@@ -52,7 +55,9 @@ describe("WebSocket Room System Integration Tests", () => {
           const room = res.data!;
           expect(room.name).toBe("Alice's Lobby");
           expect(room.hostId).toBe("user-a");
+          expect(room.status).toBe(RoomStatus.CREATED);
           expect(room.participants["user-a"].isReady).toBe(true);
+          expect(room.participants["user-a"].isConnected).toBe(true);
 
           targetRoomId = room.id;
           clientB.connect();
@@ -69,6 +74,7 @@ describe("WebSocket Room System Integration Tests", () => {
           const room = res.data!;
           expect(room.participants["user-b"]).toBeDefined();
           expect(room.participants["user-b"].isReady).toBe(false);
+          expect(room.participants["user-b"].isConnected).toBe(true);
         }
       );
     });
@@ -84,12 +90,15 @@ describe("WebSocket Room System Integration Tests", () => {
       const room = envelope.payload;
 
       if (updateCount === 1) {
+        expect(room.status).toBe(RoomStatus.CREATED);
         expect(room.participants["user-a"]).toBeDefined();
         expect(room.participants["user-b"]).toBeUndefined();
       } else if (updateCount === 2) {
+        expect(room.status).toBe(RoomStatus.WAITING);
         expect(room.participants["user-a"]).toBeDefined();
         expect(room.participants["user-b"]).toBeDefined();
         expect(room.participants["user-b"].isReady).toBe(false);
+        expect(room.participants["user-b"].isConnected).toBe(true);
 
         clientB.emit(
           "room:ready",
