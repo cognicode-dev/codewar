@@ -1,8 +1,11 @@
 import { MatchStateDTO, MatchStatus } from "@coding-arena/api-contracts";
 import crypto from "crypto";
+import { PresenceService } from "../presence/presence.service";
 
 export class MatchManager {
   private matches = new Map<string, MatchStateDTO>();
+
+  constructor(private presenceService?: PresenceService) {}
 
   public createMatch(
     roomId: string,
@@ -26,6 +29,16 @@ export class MatchManager {
       abortedReason: null
     };
     this.matches.set(matchId, match);
+
+    // Update player presence to IN_MATCH
+    const allPlayers = [...redTeam, ...blueTeam];
+    for (const userId of allPlayers) {
+      if (this.presenceService) {
+        const act = this.presenceService.getActivity(userId);
+        this.presenceService.setActivity(userId, act.username || "", "IN_MATCH", { matchId });
+      }
+    }
+
     return match;
   }
 
@@ -56,6 +69,16 @@ export class MatchManager {
     match.winnerUserId = winnerUserId;
     match.winnerTeam = winnerTeam;
     match.finishedAt = new Date().toISOString();
+
+    // Revert players presence to ONLINE
+    const allPlayers = [...match.redTeam, ...match.blueTeam];
+    for (const userId of allPlayers) {
+      if (this.presenceService) {
+        const act = this.presenceService.getActivity(userId);
+        this.presenceService.setActivity(userId, act.username || "", "ONLINE");
+      }
+    }
+
     return match;
   }
 
@@ -67,6 +90,16 @@ export class MatchManager {
     match.status = MatchStatus.ABORTED;
     match.abortedReason = reason;
     match.abortedAt = new Date().toISOString();
+
+    // Revert players presence to ONLINE
+    const allPlayers = [...match.redTeam, ...match.blueTeam];
+    for (const userId of allPlayers) {
+      if (this.presenceService) {
+        const act = this.presenceService.getActivity(userId);
+        this.presenceService.setActivity(userId, act.username || "", "ONLINE");
+      }
+    }
+
     return match;
   }
 }

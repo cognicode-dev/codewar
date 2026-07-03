@@ -16,7 +16,8 @@ import {
   EditorOperationDTO,
   RoomStatus,
   MatchStateDTO,
-  MatchStatus
+  MatchStatus,
+  QueueState
 } from "@coding-arena/api-contracts";
 import { logger } from "@coding-arena/logger";
 import { EditorManager } from "./modules/editor/editor.manager";
@@ -41,12 +42,61 @@ const io = new Server(httpServer, {
 
 io.use(socketAuthMiddleware);
 
+import { RoomAllocator } from "./modules/matchmaker/room.allocator";
+import { MatchCreator } from "./modules/matchmaker/match.creator";
+import { QueueManager } from "./modules/matchmaker/queue.manager";
+import { registerMatchmakerHandlers } from "./modules/matchmaker/matchmaker.handler";
+import { SeasonManager } from "./modules/rating/season.manager";
+import { RatingUpdater } from "./modules/rating/rating.updater";
+
+import { PresenceService } from "./modules/presence/presence.service";
+
 const roomManager = new RoomManager();
 const editorManager = new EditorManager();
 const connectionRegistry = new ConnectionRegistry();
 const sessionManager = new SessionManager();
-const matchManager = new MatchManager();
+const presenceService = new PresenceService();
+const matchManager = new MatchManager(presenceService);
 const matchEngine = new MatchEngine();
+
+const roomAllocator = new RoomAllocator(roomManager, sessionManager, connectionRegistry);
+const matchCreator = new MatchCreator(roomManager, matchManager);
+const queueManager = new QueueManager(roomAllocator, matchCreator, presenceService);
+
+import { DecayWorker } from "./modules/rating/decay.worker";
+import { IdentityService } from "./modules/identity/identity.service";
+import { SocialService } from "./modules/social/social.service";
+import { registerSocialHandlers } from "./modules/social/social.handler";
+import { PartyManager } from "./modules/party/party.manager";
+import { registerPartyHandlers } from "./modules/party/party.handler";
+import { ChatService } from "./modules/chat/chat.service";
+import { registerChatHandlers } from "./modules/chat/chat.handler";
+import { ReplayService } from "./modules/replay/replay.service";
+import { registerReplayHandlers } from "./modules/replay/replay.handler";
+
+const seasonManager = new SeasonManager();
+const ratingUpdater = new RatingUpdater(seasonManager);
+const decayWorker = new DecayWorker(ratingUpdater);
+
+const identityService = new IdentityService();
+const socialService = new SocialService(identityService, presenceService);
+const partyManager = new PartyManager();
+const chatService = new ChatService(identityService);
+const replayService = new ReplayService();
+
+// Configure presence service callbacks
+presenceService.registerFriendsProvider(async (userId) => {
+  const connections = await socialService.getSocialConnections(userId);
+  return connections.friends.map((f) => f.userId);
+});
+
+presenceService.registerNotifier((targetUserId, event, data) => {
+  connectionRegistry.sendToUser(targetUserId, event, data);
+});
+
+if (process.env.NODE_ENV !== "test") {
+  decayWorker.start();
+}
 
 io.on("connection", (socket) => {
   const userId = socket.data.userId as string;
@@ -55,6 +105,8 @@ io.on("connection", (socket) => {
   logger.info({ userId, username, socketId: socket.id }, "User connected to websocket service");
 
   connectionRegistry.register(userId, socket);
+  presenceService.setActivity(userId, username, "ONLINE");
+
   const session = sessionManager.getOrCreateSession(userId, username);
 
   // Restore room socket membership and connection status upon reconnection
@@ -74,24 +126,58 @@ io.on("connection", (socket) => {
     }
   }
 
+  queueManager.handleReconnect(userId);
+
   registerRoomHandlers(socket, roomManager, sessionManager, matchManager);
   registerEditorHandlers(socket, editorManager, sessionManager);
+  registerMatchmakerHandlers(socket, queueManager);
+  registerSocialHandlers(socket, socialService);
+  registerPartyHandlers(io, socket, partyManager, connectionRegistry);
+  registerChatHandlers(socket, chatService);
+  registerReplayHandlers(socket, replayService);
 
   socket.on("disconnect", () => {
     logger.info({ userId, username, socketId: socket.id }, "User disconnected from websocket service");
     connectionRegistry.deregister(userId, socket.id);
+    queueManager.handleDisconnect(userId);
+    presenceService.setOffline(userId);
+
+    const activeParty = partyManager.leaveParty(userId);
+    if (activeParty) {
+      io.to(`party:${activeParty.id}`).emit("party:updated", activeParty);
+    }
   });
 });
 
 // Domain Event Listeners (WebSocket Notifier)
+async function logMatchEvent(matchId: string, type: string, data: any) {
+  try {
+    await prisma.matchEvent.create({
+      data: {
+        matchId,
+        type,
+        data: JSON.parse(JSON.stringify(data)),
+        timestamp: new Date()
+      }
+    });
+  } catch (error) {
+    logger.error({ matchId, type, error: (error as Error).message }, "Failed to persist MatchEvent to database");
+  }
+}
+
 EventBroker.subscribe(DomainEventTypes.ROOM_UPDATED, (event: DomainEvent<{ roomId: string; roomState: RoomStateDTO }>) => {
   const { roomId, roomState } = event.data;
   connectionRegistry.sendToRoom(io, roomId, RealtimeEvents.ROOM_UPDATED, roomState);
 });
 
-EventBroker.subscribe(DomainEventTypes.EDITOR_OPERATION_APPLIED, (event: DomainEvent<{ roomId: string; appliedOp: EditorOperationDTO }>) => {
+EventBroker.subscribe(DomainEventTypes.EDITOR_OPERATION_APPLIED, async (event: DomainEvent<{ roomId: string; appliedOp: EditorOperationDTO }>) => {
   const { roomId, appliedOp } = event.data;
   connectionRegistry.sendToRoom(io, roomId, RealtimeEvents.EDITOR_CHANGE, appliedOp);
+
+  const room = roomManager.getRoom(roomId);
+  if (room && room.currentMatchId) {
+    await logMatchEvent(room.currentMatchId, "EDITOR_OPERATION_APPLIED", event.data);
+  }
 });
 
 EventBroker.subscribe(
@@ -123,6 +209,9 @@ EventBroker.subscribe(
         }
       });
       logger.info({ matchId: matchState.id }, "Match persisted to database successfully");
+      
+      // Save event to the match timeline
+      await logMatchEvent(matchState.id, "MATCH_STARTED", event.data);
     } catch (error) {
       logger.error({ matchId: matchState.id, error: (error as Error).message }, "Failed to persist Match to database");
     }
@@ -136,30 +225,22 @@ EventBroker.subscribe(
     connectionRegistry.sendToRoom(io, roomId, RealtimeEvents.MATCH_FINISHED, { matchState, winnerUserId });
 
     try {
-      await prisma.$transaction([
-        prisma.match.update({
-          where: { id: matchState.id },
-          data: {
-            status: "FINISHED",
-            winnerUserId,
-            winnerTeam: matchState.winnerTeam,
-            finishedAt: matchState.finishedAt ? new Date(matchState.finishedAt) : new Date()
-          }
-        }),
-        ...matchState.redTeam.map((userId) =>
-          prisma.matchParticipant.updateMany({
-            where: { matchId: matchState.id, userId },
-            data: { result: winnerUserId === userId ? "WON" : "LOST" }
-          })
-        ),
-        ...matchState.blueTeam.map((userId) =>
-          prisma.matchParticipant.updateMany({
-            where: { matchId: matchState.id, userId },
-            data: { result: winnerUserId === userId ? "WON" : "LOST" }
-          })
-        )
-      ]);
+      await prisma.match.update({
+        where: { id: matchState.id },
+        data: {
+          status: "FINISHED",
+          winnerUserId,
+          winnerTeam: matchState.winnerTeam,
+          finishedAt: matchState.finishedAt ? new Date(matchState.finishedAt) : new Date()
+        }
+      });
       logger.info({ matchId: matchState.id }, "Match finished persisted to database successfully");
+
+      // Save to match timeline
+      await logMatchEvent(matchState.id, "MATCH_FINISHED", event.data);
+
+      // Compute and update ratings for all participants
+      await ratingUpdater.handleMatchFinished(roomId, matchState, winnerUserId);
     } catch (error) {
       logger.error({ matchId: matchState.id, error: (error as Error).message }, "Failed to update Match finished in database");
     }
@@ -192,6 +273,9 @@ EventBroker.subscribe(
           })
         ]);
         logger.info({ matchId: matchState.id }, "Match aborted persisted to database successfully");
+
+        // Save event to timeline
+        await logMatchEvent(matchState.id, "MATCH_ABORTED", event.data);
       }
     } catch (error) {
       logger.error({ matchId: matchState.id, error: (error as Error).message }, "Failed to update Match aborted in database");
@@ -199,7 +283,7 @@ EventBroker.subscribe(
   }
 );
 
-EventBroker.subscribe("submission:updated", (payload) => {
+EventBroker.subscribe("submission:updated", async (payload) => {
   const { userId, submissionId, status, verdict, timeMs, memoryMb } = payload;
   logger.info({ userId, submissionId }, "Broadcasting submission update payload");
   connectionRegistry.sendToUser(userId, RealtimeEvents.SUBMISSION_UPDATED, {
@@ -209,6 +293,15 @@ EventBroker.subscribe("submission:updated", (payload) => {
     timeMs,
     memoryMb
   });
+
+  // Log to timeline if there is an active match
+  const session = sessionManager.getSession(userId);
+  if (session && session.activeRoomId) {
+    const room = roomManager.getRoom(session.activeRoomId);
+    if (room && room.currentMatchId) {
+      await logMatchEvent(room.currentMatchId, "SUBMISSION_UPDATED", payload);
+    }
+  }
 
   if (status === "COMPLETED") {
     const session = sessionManager.getSession(userId);
@@ -243,10 +336,72 @@ EventBroker.subscribe("submission:updated", (payload) => {
   }
 });
 
+EventBroker.subscribe(DomainEventTypes.PLAYER_QUEUED, (event: DomainEvent<{ userId: string; state: QueueState; queueSize: number }>) => {
+  const { userId, state, queueSize } = event.data;
+  connectionRegistry.sendToUser(userId, RealtimeEvents.QUEUE_STATUS, { userId, state, queueSize });
+});
+
+EventBroker.subscribe(DomainEventTypes.PLAYER_DEQUEUED, (event: DomainEvent<{ userId: string; state: QueueState; queueSize: number }>) => {
+  const { userId, state, queueSize } = event.data;
+  connectionRegistry.sendToUser(userId, RealtimeEvents.QUEUE_STATUS, { userId, state, queueSize });
+});
+
+EventBroker.subscribe(DomainEventTypes.MATCH_FOUND, (event: DomainEvent<{
+  matchmakerMatchId: string;
+  acceptTimeoutMs: number;
+  redTeam: string[];
+  blueTeam: string[];
+  acceptedPlayerIds: string[];
+}>) => {
+  const { matchmakerMatchId, acceptTimeoutMs, redTeam, blueTeam, acceptedPlayerIds } = event.data;
+  const allPlayers = [...redTeam, ...blueTeam];
+  for (const userId of allPlayers) {
+    connectionRegistry.sendToUser(userId, RealtimeEvents.MATCH_FOUND, {
+      matchmakerMatchId,
+      acceptTimeoutMs,
+      redTeam,
+      blueTeam,
+      acceptedPlayerIds
+    });
+  }
+});
+
+EventBroker.subscribe(DomainEventTypes.MATCH_ACCEPTED, (event: DomainEvent<{
+  matchmakerMatchId: string;
+  userId: string;
+  acceptedPlayerIds: string[];
+  playerIds: string[];
+}>) => {
+  const { matchmakerMatchId, userId, acceptedPlayerIds, playerIds } = event.data;
+  for (const pid of playerIds) {
+    connectionRegistry.sendToUser(pid, RealtimeEvents.MATCH_ACCEPTED, {
+      matchmakerMatchId,
+      userId,
+      acceptedPlayerIds
+    });
+  }
+});
+
+EventBroker.subscribe(DomainEventTypes.MATCH_DECLINED, (event: DomainEvent<{
+  matchmakerMatchId: string;
+  declinedByUserId: string;
+  reason: string;
+  playerIds: string[];
+}>) => {
+  const { matchmakerMatchId, declinedByUserId, reason, playerIds } = event.data;
+  for (const pid of playerIds) {
+    connectionRegistry.sendToUser(pid, RealtimeEvents.MATCH_DECLINED, {
+      matchmakerMatchId,
+      declinedByUserId,
+      reason
+    });
+  }
+});
+
 if (process.env.NODE_ENV !== "test") {
   httpServer.listen(port, () => {
     logger.info({ port }, "WebSocket Service running");
   });
 }
 
-export { httpServer, io };
+export { httpServer, io, queueManager, roomManager, matchManager, sessionManager, seasonManager, ratingUpdater, decayWorker, identityService, socialService, partyManager, presenceService, chatService, replayService };

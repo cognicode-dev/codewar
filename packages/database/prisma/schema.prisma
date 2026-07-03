@@ -17,6 +17,12 @@ model User {
   refreshTokens RefreshToken[]
   profile       Profile?
   submissions   Submission[]
+  ratings       UserRating[]
+  ratingHistories RatingHistory[]
+  relationships       UserRelationship[] @relation("UserRelationships")
+  targetRelationships UserRelationship[] @relation("TargetUserRelationships")
+  conversations       ConversationParticipant[]
+  messagesSent        Message[]
 
   @@index([username])
   @@index([email])
@@ -166,6 +172,8 @@ model Match {
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
   participants   MatchParticipant[]
+  timeline       MatchEvent[]
+  ratingHistories RatingHistory[]
 
   @@index([roomId])
   @@index([problemId])
@@ -183,4 +191,111 @@ model MatchParticipant {
 
   @@index([matchId])
   @@index([userId])
+}
+
+model MatchEvent {
+  id        String   @id @default(uuid())
+  matchId   String
+  match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  type      String
+  data      Json
+  timestamp DateTime @default(now())
+
+  @@index([matchId])
+}
+
+model Season {
+  id              String          @id @default(uuid())
+  number          Int             @unique
+  name            String
+  status          String          // "ACTIVE", "FINISHED"
+  startedAt       DateTime        @default(now())
+  endedAt         DateTime?
+  ratings         UserRating[]
+  ratingHistories RatingHistory[]
+}
+
+model UserRating {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seasonId         String
+  season           Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  rating           Int      @default(1200)
+  placementMatches Int      @default(0)
+  isPlaced         Boolean  @default(false)
+  lastMatchAt      DateTime @default(now())
+
+  @@unique([userId, seasonId])
+  @@index([userId])
+  @@index([seasonId])
+  @@index([rating])
+}
+
+model RatingHistory {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seasonId     String
+  season       Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  matchId      String?
+  match        Match?   @relation(fields: [matchId], references: [id], onDelete: SetNull)
+  oldRating    Int
+  newRating    Int
+  ratingChange Int
+  changeReason String   // "MATCH_RESULT", "DECAY"
+  timestamp    DateTime @default(now())
+
+  @@index([userId])
+  @@index([seasonId])
+  @@index([matchId])
+}
+
+model UserRelationship {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation("UserRelationships", fields: [userId], references: [id], onDelete: Cascade)
+  targetUserId String
+  targetUser   User     @relation("TargetUserRelationships", fields: [targetUserId], references: [id], onDelete: Cascade)
+  status       String   // "PENDING", "FRIENDS", "BLOCKED"
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([userId, targetUserId])
+  @@index([userId])
+  @@index([targetUserId])
+}
+
+model Conversation {
+  id           String                    @id @default(uuid())
+  type         String                    // "DIRECT", "PARTY", "ROOM", "SYSTEM"
+  createdAt    DateTime                  @default(now())
+  participants ConversationParticipant[]
+  messages     Message[]
+}
+
+model ConversationParticipant {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([conversationId])
+  @@index([userId])
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  content        String
+  timestamp      DateTime     @default(now())
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@index([timestamp])
 }

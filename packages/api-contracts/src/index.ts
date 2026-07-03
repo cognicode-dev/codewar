@@ -245,6 +245,16 @@ export interface RoomStateDTO {
   updatedAt: string;
 }
 
+export enum QueueState {
+  IDLE = "IDLE",
+  QUEUED = "QUEUED",
+  MATCH_FOUND = "MATCH_FOUND",
+  ACCEPTING = "ACCEPTING",
+  ROOM_CREATED = "ROOM_CREATED",
+  MATCH_STARTING = "MATCH_STARTING",
+  IN_MATCH = "IN_MATCH"
+}
+
 export const RealtimeEvents = {
   SUBMISSION_UPDATED: "submission.updated",
   ROOM_UPDATED: "room.updated",
@@ -253,6 +263,10 @@ export const RealtimeEvents = {
   MATCH_STARTED: "match.started",
   MATCH_FINISHED: "match.finished",
   MATCH_ABORTED: "match.aborted",
+  QUEUE_STATUS: "queue:status",
+  MATCH_FOUND: "match:found",
+  MATCH_ACCEPTED: "match:accepted",
+  MATCH_DECLINED: "match:declined",
   ERROR: "error"
 } as const;
 
@@ -304,5 +318,10 @@ export const DomainEventTypes = {
   EDITOR_OPERATION_APPLIED: "domain.editor.operation_applied",
   MATCH_STARTED: "domain.match.started",
   MATCH_FINISHED: "domain.match.finished",
-  MATCH_ABORTED: "domain.match.aborted"
+  MATCH_ABORTED: "domain.match.aborted",
+  PLAYER_QUEUED: "domain.matchmaker.player_queued",
+  PLAYER_DEQUEUED: "domain.matchmaker.player_dequeued",
+  MATCH_FOUND: "domain.matchmaker.match_found",
+  MATCH_ACCEPTED: "domain.matchmaker.match_accepted",
+  MATCH_DECLINED: "domain.matchmaker.match_declined"
 } as const;

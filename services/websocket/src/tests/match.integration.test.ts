@@ -20,6 +20,17 @@ describe("WebSocket Match Lifecycle Integration Tests", () => {
     await prisma.matchParticipant.deleteMany();
     await prisma.match.deleteMany();
 
+    await prisma.user.upsert({
+      where: { id: "user-a" },
+      update: {},
+      create: { id: "user-a", username: "alice", email: "alice@example.com", passwordHash: "hash" }
+    });
+    await prisma.user.upsert({
+      where: { id: "user-b" },
+      update: {},
+      create: { id: "user-b", username: "bob", email: "bob@example.com", passwordHash: "hash" }
+    });
+
     await new Promise<void>((resolve) => {
       httpServer.listen(() => {
         const address = httpServer.address();
