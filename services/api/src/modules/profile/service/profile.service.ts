@@ -46,4 +46,16 @@ export class ProfileService {
     }
     return this.profileRepository.updateProfile(userId, data);
   }
+
+  async getUserMatches(username: string): Promise<any> {
+    const profile = await this.profileRepository.findProfileByUsername(username);
+    if (!profile) {
+      throw new AppError(404, "Profile not found");
+    }
+    return this.profileRepository.findUserMatches(profile.userId);
+  }
+
+  async getLeaderboard(): Promise<any> {
+    return this.profileRepository.getLeaderboard();
+  }
 }

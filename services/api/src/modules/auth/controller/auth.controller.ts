@@ -1,20 +1,45 @@
 import { Request, Response, NextFunction } from "express";
 import { AuthService } from "../service/auth.service";
-import { RegisterSchema, LoginSchema, ChangePasswordSchema } from "@coding-arena/validation";
+import {
+  RegisterSchema,
+  LoginSchema,
+  ChangePasswordSchema,
+  VerifyEmailSchema,
+  ForgotPasswordSchema,
+  ResetPasswordSchema,
+} from "@coding-arena/validation";
 import { AuthenticatedRequest } from "../middleware/auth.middleware";
 import { UserDTO, AuthResponse } from "@coding-arena/api-contracts";
-import { User } from "@coding-arena/database";
+import { UserWithProfileAndRatings } from "../repository/auth.repository";
 import { logger } from "@coding-arena/logger";
 
 export class AuthController {
   constructor(private authService: AuthService) {}
 
-  private mapToUserDTO(user: User): UserDTO {
+  private mapToUserDTO(user: UserWithProfileAndRatings): UserDTO {
+    const activeRating = user.ratings?.[0]?.rating ?? 1000;
+    let rank = "Bronze";
+    if (activeRating >= 2000) rank = "Master";
+    else if (activeRating >= 1800) rank = "Diamond";
+    else if (activeRating >= 1600) rank = "Platinum";
+    else if (activeRating >= 1400) rank = "Gold";
+    else if (activeRating >= 1000) rank = "Silver";
+
     return {
       id: user.id,
       username: user.username,
       email: user.email,
+      avatar: user.profile?.avatarUrl || null,
+      bio: user.profile?.bio || null,
+      rank,
+      xp: user.profile?.xp ?? 0,
+      level: user.profile?.level ?? 1,
+      coins: user.coins,
+      streak: user.streak,
+      emailVerified: user.emailVerified,
+      permissions: ["USER"], // default permission set
       createdAt: user.createdAt.toISOString(),
+      updatedAt: user.updatedAt.toISOString(),
     };
   }
 
@@ -126,6 +151,36 @@ export class AuthController {
 
       const user = await this.authService.getCurrentUser(req.user.sub);
       res.status(200).json(this.mapToUserDTO(user));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  verifyEmail = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { token } = VerifyEmailSchema.parse(req.body);
+      const user = await this.authService.verifyEmail(token);
+      res.status(200).json({ message: "Email verified successfully", user: this.mapToUserDTO(user) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  forgotPassword = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { email } = ForgotPasswordSchema.parse(req.body);
+      await this.authService.forgotPassword(email);
+      res.status(200).json({ message: "If the email exists, a password reset link has been sent" });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  resetPassword = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { token, password } = ResetPasswordSchema.parse(req.body);
+      await this.authService.resetPassword(token, password);
+      res.status(200).json({ message: "Password reset successfully" });
     } catch (error) {
       next(error);
     }

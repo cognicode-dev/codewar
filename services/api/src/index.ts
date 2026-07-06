@@ -1,20 +1,23 @@
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import helmet from "helmet";
 import { ZodError } from "zod";
 import authRouter from "./modules/auth/routes/auth.routes";
 import profileRouter from "./modules/profile/routes/profile.routes";
 import problemRouter from "./modules/problem/routes/problem.routes";
 import submissionRouter from "./modules/submission/routes/submission.routes";
+import socialRouter from "./modules/social/routes/social.routes";
 import { AppError } from "./modules/auth/utils/errors";
 import { logger } from "@coding-arena/logger";
 
 const app: express.Express = express();
 const port = process.env.PORT || 3001;
 
+app.use(helmet());
 app.use(
   cors({
-    origin: true,
+    origin: process.env.FRONTEND_URL || "http://localhost:5173",
     credentials: true,
   }),
 );
@@ -26,6 +29,7 @@ app.use("/auth", authRouter);
 app.use("/profiles", profileRouter);
 app.use("/problems", problemRouter);
 app.use("/submissions", submissionRouter);
+app.use("/social", socialRouter);
 
 // Centralized Error Middleware
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

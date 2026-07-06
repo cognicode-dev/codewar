@@ -42,7 +42,7 @@ export class IdentityService {
         }
       }
 
-      let rating = 1200;
+      let rating = 1000;
       let isPlaced = false;
 
       if (targetSeasonId) {
@@ -110,7 +110,7 @@ export class IdentityService {
       }
 
       return users.map((user) => {
-        const ratingInfo = ratingsMap.get(user.id) || { rating: 1200, isPlaced: false };
+        const ratingInfo = ratingsMap.get(user.id) || { rating: 1000, isPlaced: false };
         return {
           userId: user.id,
           username: user.username,

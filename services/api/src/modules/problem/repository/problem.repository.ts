@@ -1,17 +1,19 @@
 import { prisma, Problem, ProblemVersion, Prisma } from "@coding-arena/database";
 
 export class ProblemRepository {
-  async findProblemBySlug(slug: string): Promise<Problem | null> {
+  async findProblemBySlug(slugOrId: string): Promise<Problem | null> {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slugOrId);
     return prisma.problem.findUnique({
-      where: { slug },
+      where: isUuid ? { id: slugOrId } : { slug: slugOrId },
     });
   }
 
   async findProblemWithLatestVersion(
-    slug: string,
+    slugOrId: string,
   ): Promise<(Problem & { versions: ProblemVersion[] }) | null> {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slugOrId);
     return prisma.problem.findUnique({
-      where: { slug },
+      where: isUuid ? { id: slugOrId } : { slug: slugOrId },
       include: {
         versions: {
           orderBy: { version: "desc" },

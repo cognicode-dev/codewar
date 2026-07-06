@@ -35,7 +35,7 @@ export class RatingUpdater {
               data: {
                 userId,
                 seasonId,
-                rating: 1200,
+                rating: 1000,
                 placementMatches: 0,
                 isPlaced: false
               }
@@ -127,6 +127,27 @@ export class RatingUpdater {
               data: {
                 result: resultStatus,
                 ratingChange: adjustedDelta
+              }
+            });
+          }
+
+          // Update individual Profile statistics (XP, level, gamesPlayed, gamesWon)
+          const profile = await tx.profile.findUnique({
+            where: { userId }
+          });
+          if (profile) {
+            const isWinner = resultStatus === "WON";
+            const gainedXp = isWinner ? 250 : 100;
+            const nextXp = profile.xp + gainedXp;
+            const nextLevel = Math.floor(nextXp / 1000) + 1;
+            
+            await tx.profile.update({
+              where: { userId },
+              data: {
+                xp: nextXp,
+                level: nextLevel,
+                gamesPlayed: profile.gamesPlayed + 1,
+                gamesWon: isWinner ? profile.gamesWon + 1 : profile.gamesWon
               }
             });
           }

@@ -165,9 +165,16 @@ async function logMatchEvent(matchId: string, type: string, data: any) {
   }
 }
 
-EventBroker.subscribe(DomainEventTypes.ROOM_UPDATED, (event: DomainEvent<{ roomId: string; roomState: RoomStateDTO }>) => {
+EventBroker.subscribe(DomainEventTypes.ROOM_UPDATED, async (event: DomainEvent<{ roomId: string; roomState: RoomStateDTO }>) => {
   const { roomId, roomState } = event.data;
   connectionRegistry.sendToRoom(io, roomId, RealtimeEvents.ROOM_UPDATED, roomState);
+
+  try {
+    const participantUserIds = Object.keys(roomState.participants);
+    await chatService.createEntityConversation(roomId, "ROOM", participantUserIds);
+  } catch (err) {
+    logger.error({ roomId, error: (err as Error).message }, "Failed to sync room chat conversation");
+  }
 });
 
 EventBroker.subscribe(DomainEventTypes.EDITOR_OPERATION_APPLIED, async (event: DomainEvent<{ roomId: string; appliedOp: EditorOperationDTO }>) => {
@@ -180,11 +187,58 @@ EventBroker.subscribe(DomainEventTypes.EDITOR_OPERATION_APPLIED, async (event: D
   }
 });
 
+const matchTimeouts = new Map<string, NodeJS.Timeout>();
+
 EventBroker.subscribe(
   DomainEventTypes.MATCH_STARTED,
   async (event: DomainEvent<{ roomId: string; matchState: MatchStateDTO }>) => {
     const { roomId, matchState } = event.data;
     connectionRegistry.sendToRoom(io, roomId, RealtimeEvents.MATCH_STARTED, matchState);
+
+    const timeout = setTimeout(async () => {
+      try {
+        logger.info({ matchId: matchState.id, roomId }, "3-hour match duration limit exceeded. Automatically closing room and aborting match.");
+        
+        // 1. Abort match in match manager
+        const abortedMatch = matchManager.abortMatch(matchState.id, "Match duration limit of 3 hours exceeded");
+        
+        // Publish MATCH_ABORTED
+        EventBroker.publish(DomainEventTypes.MATCH_ABORTED, {
+          type: DomainEventTypes.MATCH_ABORTED,
+          timestamp: new Date().toISOString(),
+          data: { roomId, matchState: abortedMatch, reason: "Match duration limit of 3 hours exceeded" }
+        });
+
+        // 2. Fetch room to find participants
+        const room = roomManager.getRoom(roomId);
+        if (room) {
+          // Clear session for each participant and leave socket channel
+          for (const userId of Object.keys(room.participants)) {
+            sessionManager.leaveRoom(userId);
+            const sockets = connectionRegistry.getSocketsForUser(userId);
+            if (sockets) {
+              for (const socket of sockets) {
+                socket.leave(`room:${roomId}`);
+              }
+            }
+          }
+          
+          // 3. Close room in room manager
+          roomManager.closeRoom(roomId);
+          
+          // Publish ROOM_UPDATED
+          EventBroker.publish(DomainEventTypes.ROOM_UPDATED, {
+            type: DomainEventTypes.ROOM_UPDATED,
+            timestamp: new Date().toISOString(),
+            data: { roomId, roomState: { ...room, status: RoomStatus.CLOSED } }
+          });
+        }
+      } catch (err) {
+        logger.error({ matchId: matchState.id, error: (err as Error).message }, "Error handling 3-hour match timeout");
+      }
+    }, 3 * 60 * 60 * 1000); // 3 hours in ms
+
+    matchTimeouts.set(matchState.id, timeout);
 
     try {
       await prisma.match.create({
@@ -224,6 +278,12 @@ EventBroker.subscribe(
     const { roomId, matchState, winnerUserId } = event.data;
     connectionRegistry.sendToRoom(io, roomId, RealtimeEvents.MATCH_FINISHED, { matchState, winnerUserId });
 
+    const timeout = matchTimeouts.get(matchState.id);
+    if (timeout) {
+      clearTimeout(timeout);
+      matchTimeouts.delete(matchState.id);
+    }
+
     try {
       await prisma.match.update({
         where: { id: matchState.id },
@@ -252,6 +312,12 @@ EventBroker.subscribe(
   async (event: DomainEvent<{ roomId: string; matchState: MatchStateDTO; reason: string }>) => {
     const { roomId, matchState, reason } = event.data;
     connectionRegistry.sendToRoom(io, roomId, RealtimeEvents.MATCH_ABORTED, { matchState, reason });
+
+    const timeout = matchTimeouts.get(matchState.id);
+    if (timeout) {
+      clearTimeout(timeout);
+      matchTimeouts.delete(matchState.id);
+    }
 
     try {
       const existing = await prisma.match.findUnique({
@@ -352,8 +418,9 @@ EventBroker.subscribe(DomainEventTypes.MATCH_FOUND, (event: DomainEvent<{
   redTeam: string[];
   blueTeam: string[];
   acceptedPlayerIds: string[];
+  players: { id: string; username: string }[];
 }>) => {
-  const { matchmakerMatchId, acceptTimeoutMs, redTeam, blueTeam, acceptedPlayerIds } = event.data;
+  const { matchmakerMatchId, acceptTimeoutMs, redTeam, blueTeam, acceptedPlayerIds, players } = event.data;
   const allPlayers = [...redTeam, ...blueTeam];
   for (const userId of allPlayers) {
     connectionRegistry.sendToUser(userId, RealtimeEvents.MATCH_FOUND, {
@@ -361,7 +428,8 @@ EventBroker.subscribe(DomainEventTypes.MATCH_FOUND, (event: DomainEvent<{
       acceptTimeoutMs,
       redTeam,
       blueTeam,
-      acceptedPlayerIds
+      acceptedPlayerIds,
+      players
     });
   }
 });

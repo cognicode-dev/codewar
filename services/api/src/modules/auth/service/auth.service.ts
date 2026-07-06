@@ -1,8 +1,8 @@
 import crypto from "crypto";
-import { AuthRepository } from "../repository/auth.repository";
+import { AuthRepository, UserWithProfileAndRatings } from "../repository/auth.repository";
 import { hashPassword, verifyPassword } from "../utils/argon2.utils";
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../utils/jwt.utils";
-import { User, prisma } from "@coding-arena/database";
+import { prisma } from "@coding-arena/database";
 import { logger } from "@coding-arena/logger";
 import { AppError } from "../utils/errors";
 
@@ -13,19 +13,36 @@ export class AuthService {
     return crypto.createHash("sha256").update(token).digest("hex");
   }
 
-  async register(username: string, email: string, password: string): Promise<User> {
-    const existingEmail = await this.authRepository.findUserByEmail(email);
+  async register(username: string, email: string, password: string): Promise<UserWithProfileAndRatings> {
+    const normalizedUsername = username.trim().toLowerCase();
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const existingEmail = await this.authRepository.findUserByEmail(normalizedEmail);
     if (existingEmail) {
-      throw new AppError(400, "Username or email is already registered");
+      throw new AppError(400, "Email is already registered");
     }
 
-    const existingUsername = await this.authRepository.findUserByUsername(username);
+    const existingUsername = await this.authRepository.findUserByUsername(normalizedUsername);
     if (existingUsername) {
-      throw new AppError(400, "Username or email is already registered");
+      throw new AppError(400, "Username is already in use");
     }
 
     const passwordHash = await hashPassword(password);
-    const user = await this.authRepository.createUser(username, email, passwordHash);
+    const verificationToken = crypto.randomUUID();
+    const verificationTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+    const user = await this.authRepository.createUser(
+      normalizedUsername,
+      normalizedEmail,
+      passwordHash,
+      verificationToken,
+      verificationTokenExpires,
+    );
+
+    logger.info(
+      { verificationToken, email: normalizedEmail },
+      `Verification email sent (simulated). Verification URL: http://localhost:5173/verify-email?token=${verificationToken}`,
+    );
 
     logger.info({ userId: user.id }, "User registered successfully");
     return user;
@@ -34,7 +51,7 @@ export class AuthService {
   async login(
     email: string,
     password: string,
-  ): Promise<{ accessToken: string; refreshToken: string; user: User }> {
+  ): Promise<{ accessToken: string; refreshToken: string; user: UserWithProfileAndRatings }> {
     const user = await this.authRepository.findUserByEmail(email);
     if (!user) {
       throw new AppError(401, "Invalid email or password");
@@ -64,7 +81,7 @@ export class AuthService {
     return { accessToken, refreshToken, user };
   }
 
-  async refresh(token: string): Promise<{ accessToken: string; refreshToken: string; user: User }> {
+  async refresh(token: string): Promise<{ accessToken: string; refreshToken: string; user: UserWithProfileAndRatings }> {
     try {
       verifyRefreshToken(token);
     } catch (error) {
@@ -130,12 +147,75 @@ export class AuthService {
     }
   }
 
-  async getCurrentUser(id: string): Promise<User> {
+  async getCurrentUser(id: string): Promise<UserWithProfileAndRatings> {
     const user = await this.authRepository.findUserById(id);
     if (!user) {
       throw new AppError(404, "User not found");
     }
     return user;
+  }
+
+  async verifyEmail(token: string): Promise<UserWithProfileAndRatings> {
+    const user = await this.authRepository.findUserByVerificationToken(token);
+    if (!user) {
+      throw new AppError(400, "Invalid or expired verification token");
+    }
+
+    if (user.verificationTokenExpires && new Date() > user.verificationTokenExpires) {
+      throw new AppError(400, "Invalid or expired verification token");
+    }
+
+    const updatedUser = await this.authRepository.updateUserVerification(user.id, true);
+    logger.info({ userId: user.id }, "User email verified successfully");
+    return updatedUser;
+  }
+
+  async forgotPassword(email: string): Promise<void> {
+    const user = await this.authRepository.findUserByEmail(email);
+    if (!user) {
+      // Return silently to prevent account enumeration
+      logger.info({ email }, "Forgot password request received for non-existent email");
+      return;
+    }
+
+    const resetToken = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour expiration
+
+    await this.authRepository.saveResetPasswordToken(user.id, resetToken, expiresAt);
+
+    logger.info(
+      { resetToken, email },
+      `Password reset email sent (simulated). Reset URL: http://localhost:5173/reset-password?token=${resetToken}`,
+    );
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<void> {
+    const user = await this.authRepository.findUserByResetPasswordToken(token);
+    if (!user) {
+      throw new AppError(400, "Invalid or expired password reset token");
+    }
+
+    if (user.resetPasswordTokenExpires && new Date() > user.resetPasswordTokenExpires) {
+      throw new AppError(400, "Invalid or expired password reset token");
+    }
+
+    const newPasswordHash = await hashPassword(newPassword);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        data: {
+          passwordHash: newPasswordHash,
+          resetPasswordToken: null,
+          resetPasswordTokenExpires: null,
+        },
+      });
+      await tx.refreshToken.deleteMany({
+        where: { userId: user.id },
+      });
+    });
+
+    logger.info({ userId: user.id }, "User reset password successfully and active sessions revoked");
   }
 
   async changePassword(userId: string, oldPassword: string, newPassword: string): Promise<void> {

@@ -201,4 +201,76 @@ describe("Auth Integration Tests", () => {
       expect(res.body.accessToken).toBeDefined();
     });
   });
+
+  describe("POST /auth/verify-email & POST /auth/forgot-password & POST /auth/reset-password", () => {
+    let verificationToken = "";
+    let resetToken = "";
+
+    it("should register a user and save verification token", async () => {
+      const signupUser = {
+        username: "verify_tester",
+        email: "verify@example.com",
+        password: "supersecurepassword123",
+      };
+
+      const res = await request(app).post("/auth/register").send(signupUser);
+      expect(res.status).toBe(201);
+
+      const dbUser = await prisma.user.findUnique({ where: { email: signupUser.email } });
+      expect(dbUser).toBeDefined();
+      expect(dbUser?.emailVerified).toBe(false);
+      expect(dbUser?.verificationToken).not.toBeNull();
+      verificationToken = dbUser?.verificationToken || "";
+    });
+
+    it("should verify user email with valid token", async () => {
+      const res = await request(app).post("/auth/verify-email").send({
+        token: verificationToken,
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body.user.emailVerified).toBe(true);
+
+      const dbUser = await prisma.user.findUnique({ where: { email: "verify@example.com" } });
+      expect(dbUser?.emailVerified).toBe(true);
+      expect(dbUser?.verificationToken).toBeNull();
+    });
+
+    it("should fail email verification with invalid token", async () => {
+      const res = await request(app).post("/auth/verify-email").send({
+        token: "non_existent_token_123",
+      });
+
+      expect(res.status).toBe(400);
+    });
+
+    it("should generate a forgot password reset token", async () => {
+      const res = await request(app).post("/auth/forgot-password").send({
+        email: "verify@example.com",
+      });
+
+      expect(res.status).toBe(200);
+
+      const dbUser = await prisma.user.findUnique({ where: { email: "verify@example.com" } });
+      expect(dbUser?.resetPasswordToken).not.toBeNull();
+      resetToken = dbUser?.resetPasswordToken || "";
+    });
+
+    it("should reset password using reset token", async () => {
+      const res = await request(app).post("/auth/reset-password").send({
+        token: resetToken,
+        password: "new_secure_password_999",
+      });
+
+      expect(res.status).toBe(200);
+
+      const loginRes = await request(app).post("/auth/login").send({
+        email: "verify@example.com",
+        password: "new_secure_password_999",
+      });
+
+      expect(loginRes.status).toBe(200);
+      expect(loginRes.body.accessToken).toBeDefined();
+    });
+  });
 });

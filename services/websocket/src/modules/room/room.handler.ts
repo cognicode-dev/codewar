@@ -130,6 +130,36 @@ export function registerRoomHandlers(
       }
 
       const roomId = session.activeRoomId;
+      const room = roomManager.getRoom(roomId);
+
+      // Handle active match ending if someone leaves during match
+      if (room && room.status === RoomStatus.MATCH_IN_PROGRESS && room.currentMatchId) {
+        const match = matchManager.getMatch(room.currentMatchId);
+        if (match && match.status === "ACTIVE") {
+          const remainingParticipants = Object.keys(room.participants).filter(uid => uid !== userId);
+          if (remainingParticipants.length > 0) {
+            const winnerUserId = remainingParticipants[0];
+            const isRed = match.redTeam.includes(winnerUserId);
+            const winnerTeam = isRed ? "red" : "blue";
+            
+            const finishedMatch = matchManager.finishMatch(room.currentMatchId, winnerUserId, winnerTeam as any);
+            
+            EventBroker.publish(DomainEventTypes.MATCH_FINISHED, {
+              type: DomainEventTypes.MATCH_FINISHED,
+              timestamp: new Date().toISOString(),
+              data: { roomId, matchState: finishedMatch, winnerUserId }
+            });
+          } else {
+            const abortedMatch = matchManager.abortMatch(room.currentMatchId, "All participants left");
+            EventBroker.publish(DomainEventTypes.MATCH_ABORTED, {
+              type: DomainEventTypes.MATCH_ABORTED,
+              timestamp: new Date().toISOString(),
+              data: { roomId, matchState: abortedMatch, reason: "All participants left" }
+            });
+          }
+        }
+      }
+
       checkAndCancelCountdown(roomId, "Participant left the lobby");
 
       socket.leave(`room:${roomId}`);
@@ -382,6 +412,54 @@ export function registerRoomHandlers(
       }
     }
   );
+
+  socket.on("room:typing", (payload: { isTyping: boolean }) => {
+    try {
+      const userId = getUserId();
+      const session = sessionManager.getSession(userId);
+      if (session && session.activeRoomId) {
+        socket.to(`room:${session.activeRoomId}`).emit("room:typing:state", {
+          userId,
+          isTyping: payload.isTyping
+        });
+      }
+    } catch (err) {
+      logger.error({ error: (err as Error).message }, "Error broadcasting room typing");
+    }
+  });
+
+  socket.on("room:status", (payload: { status: string }) => {
+    try {
+      const userId = getUserId();
+      const session = sessionManager.getSession(userId);
+      if (session && session.activeRoomId) {
+        socket.to(`room:${session.activeRoomId}`).emit("room:status:state", {
+          userId,
+          status: payload.status
+        });
+      }
+    } catch (err) {
+      logger.error({ error: (err as Error).message }, "Error broadcasting room status");
+    }
+  });
+
+  socket.on("room:chat", (payload: { content: string }) => {
+    try {
+      const userId = getUserId();
+      const username = getUsername();
+      const session = sessionManager.getSession(userId);
+      if (session && session.activeRoomId) {
+        socket.nsp.to(`room:${session.activeRoomId}`).emit("room:chat:message", {
+          senderId: userId,
+          senderName: username,
+          content: payload.content,
+          timestamp: new Date().toISOString()
+        });
+      }
+    } catch (err) {
+      logger.error({ error: (err as Error).message }, "Error broadcasting room chat message");
+    }
+  });
 
   socket.on("disconnect", () => {
     const userId = getUserId();

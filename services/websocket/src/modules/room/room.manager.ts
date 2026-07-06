@@ -112,6 +112,15 @@ export class RoomManager {
     return room;
   }
 
+  public closeRoom(roomId: string): void {
+    const room = this.rooms.get(roomId);
+    if (room) {
+      room.status = RoomStatus.CLOSED;
+      room.updatedAt = new Date().toISOString();
+      this.rooms.delete(roomId);
+    }
+  }
+
   public toggleReady(roomId: string, userId: string): RoomStateDTO {
     const room = this.rooms.get(roomId);
     if (!room) {

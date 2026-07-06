@@ -4,7 +4,7 @@
   "packageManager": "pnpm@9.0.0",
   "scripts": {
     "build": "turbo build",
-    "dev": "turbo dev",
+    "dev": "turbo dev --filter=@coding-arena/api --filter=@coding-arena/websocket --filter=@coding-arena/judge --concurrency 20",
     "lint": "turbo lint",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
     "prepare": "husky",

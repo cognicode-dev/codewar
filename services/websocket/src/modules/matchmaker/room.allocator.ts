@@ -25,12 +25,64 @@ export class RoomAllocator {
 
     let problemId = "prob-xyz";
     try {
-      const problem = await prisma.problem.findFirst();
-      if (problem) {
-        problemId = problem.id;
+      let problem = await prisma.problem.findFirst();
+      if (!problem) {
+        problem = await prisma.problem.create({
+          data: {
+            title: "Find Duplicate Number",
+            slug: "find-duplicate-number",
+            difficulty: "MEDIUM",
+            tags: ["array", "two-pointers"],
+            visibility: "PUBLIC",
+            versions: {
+              create: {
+                version: 1,
+                statement: "Given an array of integers `nums` containing `n + 1` integers where each integer is in the range `[1, n]` inclusive.\n\nThere is only **one repeated number** in `nums`, return *this repeated number*.",
+                constraints: "You must solve the problem **without** modifying the array `nums` and use only constant extra space.",
+                timeLimit: 1000,
+                memoryLimit: 256,
+                examples: [
+                  {
+                    id: 1,
+                    input: "[1,3,4,2,2]",
+                    output: "2"
+                  }
+                ] as any,
+                testCases: [
+                  {
+                    input: "[1,3,4,2,2]",
+                    output: "2"
+                  },
+                  {
+                    input: "[3,1,3,4,2]",
+                    output: "3"
+                  }
+                ] as any,
+                languages: {
+                  javascript: {
+                    template: "// type your code here\nconst fs = require('fs');\n"
+                  },
+                  typescript: {
+                    template: "// type your code here\nimport * as fs = require('fs');\n"
+                  },
+                  python: {
+                    template: "# type your code here\nimport sys\nimport json\n"
+                  },
+                  "c++": {
+                    template: "// type your code here\n#include <iostream>\n#include <vector>\n#include <string>\n#include <algorithm>\nusing namespace std;\n"
+                  },
+                  java: {
+                    template: "// type your code here\nimport java.util.*;\nimport java.io.*;\n"
+                  }
+                } as any
+              }
+            }
+          }
+        });
       }
-    } catch {
-      // Fallback
+      problemId = problem.id;
+    } catch (err) {
+      console.error("Failed to seed default problem on allocator:", err);
     }
 
     const host = players[0];

@@ -15,6 +15,7 @@ interface PlayerSession {
   joinedAt?: Date;
   matchLobbyId?: string;
   disconnectTimeout?: NodeJS.Timeout;
+  mode?: string;
 }
 
 interface MatchLobby {
@@ -49,11 +50,15 @@ export class QueueManager {
     return p ? p.state : QueueState.IDLE;
   }
 
-  public getQueueSize(): number {
-    return Array.from(this.players.values()).filter((p) => p.state === QueueState.QUEUED).length;
+  public getQueueSize(mode?: string): number {
+    return Array.from(this.players.values()).filter((p) => {
+      if (p.state !== QueueState.QUEUED) return false;
+      if (mode && (p.mode || "solo") !== mode) return false;
+      return true;
+    }).length;
   }
 
-  public joinQueue(userId: string, username: string): void {
+  public joinQueue(userId: string, username: string, mode = "solo"): void {
     const p = this.players.get(userId);
     if (p && p.state !== QueueState.IDLE) {
       return;
@@ -68,14 +73,15 @@ export class QueueManager {
       userId,
       username,
       state: QueueState.QUEUED,
-      joinedAt: new Date()
+      joinedAt: new Date(),
+      mode
     });
 
     if (this.presenceService) {
       this.presenceService.setActivity(userId, username, "IN_QUEUE");
     }
 
-    logger.info({ userId, username }, "Player joined matchmaking queue");
+    logger.info({ userId, username, mode }, "Player joined matchmaking queue");
 
     EventBroker.publish(DomainEventTypes.PLAYER_QUEUED, {
       type: DomainEventTypes.PLAYER_QUEUED,
@@ -204,20 +210,26 @@ export class QueueManager {
   }
 
   private attemptMatching(): void {
-    const queuedList: QueuedPlayer[] = [];
-    for (const p of this.players.values()) {
-      if (p.state === QueueState.QUEUED && p.joinedAt) {
-        queuedList.push({
-          userId: p.userId,
-          username: p.username,
-          joinedAt: p.joinedAt
-        });
+    const modes = ["solo", "2v2"];
+    for (const mode of modes) {
+      const queuedList: QueuedPlayer[] = [];
+      for (const p of this.players.values()) {
+        if (p.state === QueueState.QUEUED && p.joinedAt && (p.mode || "solo") === mode) {
+          queuedList.push({
+            userId: p.userId,
+            username: p.username,
+            joinedAt: p.joinedAt
+          });
+        }
       }
-    }
 
-    const matchedGroups = this.matchBuilder.findMatches(queuedList);
-    for (const group of matchedGroups) {
-      this.createLobby(group);
+      const teamSize = mode === "2v2" ? 2 : 1;
+      this.matchBuilder.setTeamSize(teamSize);
+
+      const matchedGroups = this.matchBuilder.findMatches(queuedList);
+      for (const group of matchedGroups) {
+        this.createLobby(group);
+      }
     }
   }
 
@@ -278,7 +290,8 @@ export class QueueManager {
         acceptTimeoutMs: this.acceptTimeoutMs,
         redTeam,
         blueTeam,
-        acceptedPlayerIds: []
+        acceptedPlayerIds: [],
+        players
       }
     });
   }

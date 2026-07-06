@@ -6,19 +6,33 @@ export function registerMatchmakerHandlers(socket: Socket, queueManager: QueueMa
   const getUserId = () => socket.data.userId as string;
   const getUsername = () => socket.data.username as string;
 
-  socket.on("queue:join", (_, callback) => {
+  socket.on("queue:join", (payload: any, callback: any) => {
     try {
       const userId = getUserId();
       const username = getUsername();
-      queueManager.joinQueue(userId, username);
-      if (callback) {
-        callback({ success: true });
+      
+      let actualPayload = payload;
+      let actualCallback = callback;
+      if (typeof payload === "function") {
+        actualCallback = payload;
+        actualPayload = {};
+      }
+
+      const mode = actualPayload?.mode || "solo";
+      queueManager.joinQueue(userId, username, mode);
+      if (actualCallback) {
+        actualCallback({ success: true });
       }
     } catch (err) {
       const msg = (err as Error).message;
       logger.error({ userId: getUserId(), error: msg }, "Error joining queue");
-      if (callback) {
-        callback({ success: false, error: msg });
+      
+      let actualCallback = callback;
+      if (typeof payload === "function") {
+        actualCallback = payload;
+      }
+      if (actualCallback) {
+        actualCallback({ success: false, error: msg });
       }
     }
   });

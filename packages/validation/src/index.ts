@@ -149,3 +149,25 @@ export const CreateSubmissionSchema = z.object({
 });
 
 export type CreateSubmissionInput = z.infer<typeof CreateSubmissionSchema>;
+
+export const VerifyEmailSchema = z.object({
+  token: z.string().min(1, "Verification token is required"),
+});
+
+export type VerifyEmailInput = z.infer<typeof VerifyEmailSchema>;
+
+export const ForgotPasswordSchema = z.object({
+  email: z.string().email("Invalid email format"),
+});
+
+export type ForgotPasswordInput = z.infer<typeof ForgotPasswordSchema>;
+
+export const ResetPasswordSchema = z.object({
+  token: z.string().min(1, "Reset token is required"),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters long")
+    .max(100, "Password must not exceed 100 characters"),
+});
+
+export type ResetPasswordInput = z.infer<typeof ResetPasswordSchema>;

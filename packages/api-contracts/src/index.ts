@@ -7,7 +7,30 @@ export interface UserDTO {
   id: string;
   username: string;
   email: string;
+  avatar: string | null;
+  bio: string | null;
+  rank: string;
+  xp: number;
+  level: number;
+  coins: number;
+  streak: number;
+  emailVerified: boolean;
+  permissions: string[];
   createdAt: string;
+  updatedAt: string;
+}
+
+export interface VerifyEmailRequest {
+  token: string;
+}
+
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface ResetPasswordRequest {
+  token: string;
+  passwordHash: string; // The service receives hashed password or updates directly
 }
 
 export interface AuthResponse {
@@ -50,6 +73,7 @@ export interface ProfileDTO {
   statistics: StatisticsDTO;
   socialLinks: SocialLinksDTO;
   createdAt: string;
+  rating?: number;
 }
 
 export interface UpdateProfileRequest {
