@@ -102,6 +102,18 @@ io.on("connection", (socket) => {
   const userId = socket.data.userId as string;
   const username = socket.data.username as string;
 
+  // Disconnect any existing tab connections first to enforce one active tab connection per user
+  const existingSockets = connectionRegistry.getSocketsForUser(userId);
+  if (existingSockets && existingSockets.size > 0) {
+    logger.info({ userId }, "Kicking existing socket connections due to multi-tab connection");
+    for (const oldSocket of existingSockets) {
+      oldSocket.emit("auth:kick", { reason: "Logged in from another location" });
+      oldSocket.removeAllListeners("disconnect");
+      oldSocket.disconnect(true);
+    }
+    connectionRegistry.disconnectUser(userId);
+  }
+
   logger.info({ userId, username, socketId: socket.id }, "User connected to websocket service");
 
   connectionRegistry.register(userId, socket);
