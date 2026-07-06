@@ -88,8 +88,9 @@ export class AuthController {
         "User logged in successfully",
       );
 
-      const response: AuthResponse = {
+      const response: AuthResponse & { refreshToken?: string } = {
         accessToken,
+        refreshToken,
         user: this.mapToUserDTO(user),
       };
 
@@ -111,8 +112,9 @@ export class AuthController {
 
       this.setRefreshTokenCookie(res, refreshToken);
 
-      const response: AuthResponse = {
+      const response: AuthResponse & { refreshToken?: string } = {
         accessToken,
+        refreshToken,
         user: this.mapToUserDTO(user),
       };
 

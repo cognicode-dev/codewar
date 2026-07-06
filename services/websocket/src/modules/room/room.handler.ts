@@ -418,7 +418,7 @@ export function registerRoomHandlers(
       const userId = getUserId();
       const session = sessionManager.getSession(userId);
       if (session && session.activeRoomId) {
-        socket.to(`room:${session.activeRoomId}`).emit("room:typing:state", {
+        socket.nsp.to(`room:${session.activeRoomId}`).emit("room:typing:state", {
           userId,
           isTyping: payload.isTyping
         });
@@ -433,7 +433,7 @@ export function registerRoomHandlers(
       const userId = getUserId();
       const session = sessionManager.getSession(userId);
       if (session && session.activeRoomId) {
-        socket.to(`room:${session.activeRoomId}`).emit("room:status:state", {
+        socket.nsp.to(`room:${session.activeRoomId}`).emit("room:status:state", {
           userId,
           status: payload.status
         });

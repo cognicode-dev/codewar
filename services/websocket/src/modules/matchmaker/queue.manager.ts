@@ -192,12 +192,11 @@ export class QueueManager {
 
     if (p.disconnectTimeout) {
       clearTimeout(p.disconnectTimeout);
+      p.disconnectTimeout = undefined;
     }
 
-    p.disconnectTimeout = setTimeout(() => {
-      logger.info({ userId }, "Matchmaking player disconnect grace period expired. Dequeuing player.");
-      this.leaveQueue(userId);
-    }, 5000);
+    logger.info({ userId }, "Matchmaking player went offline. Dequeuing player immediately.");
+    this.leaveQueue(userId);
   }
 
   public handleReconnect(userId: string): void {
